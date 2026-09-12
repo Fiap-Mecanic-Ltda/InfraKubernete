@@ -1,0 +1,232 @@
+name: Deploy no Kubernetes (k3s)
+
+# Aplica os manifestos de produção no k3s da EC2. Roda quando os manifestos
+# mudam neste repositório e, principalmente, sob demanda (workflow_dispatch)
+# depois que o repositório da aplicação publica uma imagem nova no ECR.
+#
+# Não há kubeconfig exposto: a porta 6443 do k3s nunca é publicada. A pipeline
+# manda o manifesto renderizado para dentro da instância via SSM Run Command e
+# roda `kubectl apply` localmente lá, reaproveitando o mesmo IAM/SSM usado para
+# acesso administrativo (sem SSH).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "k8s/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag das imagens no ECR (vazio = última imagem publicada)"
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  # Necessário para o OIDC do GitHub assumir a role da AWS.
+  id-token: write
+
+concurrency:
+  group: deploy-k8s-prod
+  cancel-in-progress: false
+
+env:
+  # Mesmo bucket do state remoto (infra/versions.tf) — usado só como área de
+  # troca dos manifestos com a instância (prefixo deploy/).
+  STATE_BUCKET: mechanicltda-terraform-state-430606112709
+
+jobs:
+  read-tf-vars:
+    name: Lê variáveis padrão do Terraform
+    runs-on: ubuntu-latest
+    outputs:
+      aws_region: ${{ steps.vars.outputs.aws_region }}
+      project_name: ${{ steps.vars.outputs.project_name }}
+      environment: ${{ steps.vars.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extrai defaults do variables.tf
+        id: vars
+        run: |
+          for name in aws_region project_name environment; do
+            value=$(awk "/variable \"$name\"/,/^}/" infra/variables.tf | grep default | sed -E 's/.*default[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/')
+            if [ -z "$value" ]; then
+              echo "::error::Não encontrei o default de $name em infra/variables.tf"
+              exit 1
+            fi
+            echo "$name=$value" >> "$GITHUB_OUTPUT"
+          done
+
+  deploy:
+    name: Aplica os manifestos via SSM
+    needs: read-tf-vars
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ needs.read-tf-vars.outputs.aws_region }}
+      PROJECT_NAME: ${{ needs.read-tf-vars.outputs.project_name }}
+      ENVIRONMENT: ${{ needs.read-tf-vars.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configura credenciais AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login no ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Sem input, usa a imagem mais recente publicada pelo repositório da
+      # aplicação. A tag imutável (SHA do commit) é preferida a "latest":
+      # os Deployments usam imagePullPolicy IfNotPresent, então reaplicar
+      # "latest" não traria a imagem nova para o nó.
+      - name: Resolve a tag da imagem
+        id: image
+        run: |
+          TAG="${{ inputs.image_tag }}"
+          if [ -z "$TAG" ]; then
+            TAG=$(aws ecr describe-images \
+              --repository-name "${PROJECT_NAME}-api" \
+              --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags' \
+              --output text | tr '\t' '\n' | grep -v '^latest$' | head -n1)
+          fi
+          if [ -z "$TAG" ] || [ "$TAG" = "None" ]; then
+            echo "::error::Nenhuma imagem encontrada no ECR (${PROJECT_NAME}-api). Rode a pipeline do repositório da aplicação primeiro, ou informe image_tag."
+            exit 1
+          fi
+          echo "Usando a tag: $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      # O Instance ID muda toda vez que a instância é substituída (ex: mudança
+      # em user_data), por isso é descoberto pela tag Name e não por um secret.
+      - name: Descobre o Instance ID atual
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=${PROJECT_NAME}-${ENVIRONMENT}-api" "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].InstanceId" --output text)
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "::error::Não encontrei uma instância EC2 rodando com a tag Name esperada. Rode o workflow terraform.yml (apply) antes."
+            exit 1
+          fi
+          echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      # Renderiza os manifestos de produção (Namespace, ConfigMap, API, Web,
+      # Services NodePort, HPA) já com as imagens do ECR.
+      - name: Renderiza os manifestos (kustomize)
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          cp -r k8s /tmp/prod-render
+          cat >> /tmp/prod-render/overlays/prod/kustomization.yaml <<EOF
+          images:
+            - name: mechanicltda-api
+              newName: ${ECR_REGISTRY}/${PROJECT_NAME}-api
+              newTag: ${IMAGE_TAG}
+            - name: mechanicltda-web
+              newName: ${ECR_REGISTRY}/${PROJECT_NAME}-web
+              newTag: ${IMAGE_TAG}
+          EOF
+          kubectl kustomize /tmp/prod-render/overlays/prod > /tmp/app-manifests.yaml
+
+      # Segredos reais nunca ficam no YAML versionado — vêm do SSM Parameter
+      # Store (alimentado pelo Terraform a partir do terraform.tfvars) e o
+      # Secret é montado em runtime.
+      - name: Monta o Secret a partir do SSM Parameter Store
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          PREFIX="/${PROJECT_NAME}/${ENVIRONMENT}"
+          get_param() { aws ssm get-parameter --name "$1" --with-decryption --query 'Parameter.Value' --output text; }
+
+          kubectl create secret generic mechanicltda-secrets \
+            --namespace mechanicltda \
+            --from-literal=ConnectionStrings__DefaultConnection="$(get_param $PREFIX/db-connection-string)" \
+            --from-literal=JWT_SECRET_KEY="$(get_param $PREFIX/jwt-secret-key)" \
+            --from-literal=ENCRYPTION_KEY="$(get_param $PREFIX/encryption-key)" \
+            --from-literal=EmailSettings__Password="$(get_param $PREFIX/email-password)" \
+            --from-literal=AppSettings__BaseUrlAprovacao="$(get_param $PREFIX/app-base-url-aprovacao)" \
+            --dry-run=client -o yaml > /tmp/secret-manifest.yaml
+
+          # "---" é obrigatório entre documentos concatenados manualmente - sem
+          # ele, "kubectl apply -f -" processa só o último documento do stream e
+          # ignora os anteriores em silêncio.
+          echo "---" >> /tmp/secret-manifest.yaml
+
+          kubectl create secret docker-registry ecr-creds \
+            --namespace mechanicltda \
+            --docker-server="${ECR_REGISTRY}" \
+            --docker-username=AWS \
+            --docker-password="$(aws ecr get-login-password --region "$AWS_REGION")" \
+            --dry-run=client -o yaml >> /tmp/secret-manifest.yaml
+
+      - name: Envia os manifestos para a instância via SSM e aplica
+        run: |
+          # Os manifestos vão pro S3 em vez de embutidos inline no comando do
+          # SSM: o payload em base64 (~11KB) estourava os limites práticos do
+          # SSM Run Command - o comando era aceito (ganhava CommandId) mas
+          # travava "InProgress" pra sempre, sem output nenhum.
+          #
+          # App e Secrets vão em DOIS "kubectl apply" separados (dois arquivos
+          # no S3, dois comandos na mesma chamada do SSM): aplicar tudo junto
+          # num único stream (HPA + Secret misturados) corrompia o patch
+          # calculado pro último recurso - erro real: "unknown field spec" ao
+          # atualizar o Secret ecr-creds, com campos vazados de um HPA.
+          APP_KEY="deploy/app-${{ github.sha }}.yaml"
+          SECRET_KEY="deploy/secret-${{ github.sha }}.yaml"
+          aws s3 cp /tmp/app-manifests.yaml "s3://${STATE_BUCKET}/${APP_KEY}"
+          aws s3 cp /tmp/secret-manifest.yaml "s3://${STATE_BUCKET}/${SECRET_KEY}"
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "{\"commands\":[\"export KUBECONFIG=/etc/rancher/k3s/k3s.yaml\",\"aws s3 cp s3://${STATE_BUCKET}/${APP_KEY} - | /usr/local/bin/kubectl apply -f -\",\"aws s3 cp s3://${STATE_BUCKET}/${SECRET_KEY} - | /usr/local/bin/kubectl apply -f -\"]}" \
+            --query "Command.CommandId" --output text)
+
+          # Aguarda o comando terminar antes de checar o resultado.
+          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" || true
+
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" > /tmp/invocation.json
+
+          cat /tmp/invocation.json
+
+          aws s3 rm "s3://${STATE_BUCKET}/${APP_KEY}" || true
+          aws s3 rm "s3://${STATE_BUCKET}/${SECRET_KEY}" || true
+
+          STATUS=$(python3 -c "import json;print(json.load(open('/tmp/invocation.json'))['Status'])")
+          if [ "$STATUS" != "Success" ]; then
+            echo "::error::Falha ao aplicar os manifestos via SSM (status: $STATUS)"
+            exit 1
+          fi
+
+      # Aguarda o rollout terminar sem derrubar o serviço (mesmo princípio do
+      # readinessProbe).
+      - name: Aguarda o rollout via SSM
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters '{"commands":["export KUBECONFIG=/etc/rancher/k3s/k3s.yaml","/usr/local/bin/kubectl rollout status deployment/mechanicltda-api -n mechanicltda --timeout=300s","/usr/local/bin/kubectl rollout status deployment/mechanicltda-web -n mechanicltda --timeout=300s"]}' \
+            --query "Command.CommandId" --output text)
+
+          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" || true
+
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" > /tmp/rollout.json
+
+          cat /tmp/rollout.json
+          STATUS=$(python3 -c "import json;print(json.load(open('/tmp/rollout.json'))['Status'])")
+          if [ "$STATUS" != "Success" ]; then
+            echo "::error::Rollout não completou a tempo (status: $STATUS)"
+            exit 1
+          fi

@@ -1,0 +1,68 @@
+# SQL Server é stateful e de instância única — não é candidato a HPA.
+# Usamos Deployment (replicas: 1, strategy: Recreate) em vez de StatefulSet para
+# manter o escopo simples. Só existe neste overlay de dev local: em produção
+# (overlays/prod) o banco é um RDS gerenciado, provisionado via Terraform.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mechanicltda-sqlserver
+  namespace: mechanicltda
+  labels:
+    app.kubernetes.io/part-of: mechanicltda
+    app.kubernetes.io/name: sqlserver
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sqlserver
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sqlserver
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: sqlserver
+          image: mcr.microsoft.com/mssql/server:2022-latest
+          ports:
+            - containerPort: 1433
+              name: tcp-mssql
+          env:
+            - name: ACCEPT_EULA
+              value: "Y"
+            - name: MSSQL_PID
+              value: "Developer"
+            - name: SA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mechanicltda-secrets
+                  key: SA_PASSWORD
+          volumeMounts:
+            - name: sqlserver-data
+              mountPath: /var/opt/mssql
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "2Gi"
+            limits:
+              cpu: "1"
+              memory: "3Gi"
+          readinessProbe:
+            tcpSocket:
+              port: 1433
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket:
+              port: 1433
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 6
+      volumes:
+        - name: sqlserver-data
+          persistentVolumeClaim:
+            claimName: mechanicltda-sqlserver-data

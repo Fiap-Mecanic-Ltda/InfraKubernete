@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mechanicltda-sqlserver-data
+  namespace: mechanicltda
+  labels:
+    app.kubernetes.io/part-of: mechanicltda
+    app.kubernetes.io/name: sqlserver
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

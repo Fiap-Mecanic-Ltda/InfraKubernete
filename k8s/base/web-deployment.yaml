@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mechanicltda-web
+  namespace: mechanicltda
+  labels:
+    app.kubernetes.io/part-of: mechanicltda
+    app.kubernetes.io/name: web
+spec:
+  # O HPA (web-hpa.yaml) controla o número de réplicas em execução; este valor
+  # só vale enquanto o HPA ainda não calculou uma recomendação.
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: web
+    spec:
+      containers:
+        - name: web
+          image: mechanicltda-web:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: mechanicltda-config
+          env:
+            - name: ConnectionStrings__DefaultConnection
+              valueFrom:
+                secretKeyRef:
+                  name: mechanicltda-secrets
+                  key: ConnectionStrings__DefaultConnection
+            - name: JwtSettings__SecretKey
+              valueFrom:
+                secretKeyRef:
+                  name: mechanicltda-secrets
+                  key: JWT_SECRET_KEY
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mechanicltda-secrets
+                  key: JWT_SECRET_KEY
+            - name: Encryption__CpfCnpjKey
+              valueFrom:
+                secretKeyRef:
+                  name: mechanicltda-secrets
+                  key: ENCRYPTION_KEY
+            - name: EmailSettings__Password
+              valueFrom:
+                secretKeyRef:
+                  name: mechanicltda-secrets
+                  key: EmailSettings__Password
+            - name: AppSettings__BaseUrlAprovacao
+              valueFrom:
+                secretKeyRef:
+                  name: mechanicltda-secrets
+                  key: AppSettings__BaseUrlAprovacao
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "192Mi"
+            limits:
+              cpu: "500m"
+              memory: "384Mi"
+          # Cobre o tempo de migration com retry (ate 100s) sem deixar o
+          # liveness/readiness matar o container no meio do boot - sem isso,
+          # o probe reiniciava o pod antes da migration terminar.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 15
+            failureThreshold: 6

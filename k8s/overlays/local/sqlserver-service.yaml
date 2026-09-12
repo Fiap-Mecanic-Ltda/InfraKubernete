@@ -1,0 +1,17 @@
+# ClusterIP — o SQL Server só precisa ser alcançável pelos hosts API/Web dentro do cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mechanicltda-sqlserver
+  namespace: mechanicltda
+  labels:
+    app.kubernetes.io/part-of: mechanicltda
+    app.kubernetes.io/name: sqlserver
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: sqlserver
+  ports:
+    - name: tcp-mssql
+      port: 1433
+      targetPort: 1433

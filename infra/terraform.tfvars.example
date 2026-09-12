@@ -1,0 +1,10 @@
+# Copie para terraform.tfvars com valores reais. Nunca commite o real.
+# As variaveis do banco (db_*) nao ficam mais aqui: o RDS foi para o
+# repositorio de infra do banco gerenciado, com o proprio tfvars.
+
+ec2_key_pair_name = "mechanicltda-prod"
+
+# Minimo 32 caracteres em jwt_secret_key e encryption_cpf_cnpj_key.
+jwt_secret_key          = "CHANGE_ME_JWT_SECRET_MIN_32_CHARS"
+encryption_cpf_cnpj_key = "CHANGE_ME_ENCRYPTION_KEY_MIN_32_CHARS"
+email_password          = "CHANGE_ME_GMAIL_APP_PASSWORD"
