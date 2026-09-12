@@ -1,0 +1,70 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mechanicltda
+
+resources:
+  - ../../base
+
+# Em produção o banco é o RDS (Terraform), não um pod — só a base entra aqui.
+# As tags de imagem são sobrescritas pela pipeline via `kustomize edit set image`
+# antes do apply (ver .github/workflows/deploy.yml).
+
+patches:
+  # NodePort fixo — o security group da EC2 (infra/security_groups.tf) libera
+  # exatamente as portas 8080 (api) e 8090 (web); o k3s é instalado com
+  # `--service-node-port-range=8000-9000` para aceitar esses valores.
+  - target:
+      kind: Service
+      name: mechanicltda-api
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 8080
+  - target:
+      kind: Service
+      name: mechanicltda-web
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 8090
+  # ECR exige autenticação para pull — o Secret docker-registry "ecr-creds" é
+  # criado/atualizado à parte (timer no user_data + a cada deploy da pipeline).
+  - target:
+      kind: Deployment
+      name: mechanicltda-api
+    patch: |-
+      - op: add
+        path: /spec/template/spec/imagePullSecrets
+        value:
+          - name: ecr-creds
+  - target:
+      kind: Deployment
+      name: mechanicltda-web
+    patch: |-
+      - op: add
+        path: /spec/template/spec/imagePullSecrets
+        value:
+          - name: ecr-creds
+  # Remove o Secret placeholder do base (a pipeline recria "mechanicltda-secrets"
+  # em runtime com os valores reais do SSM Parameter Store - ver deploy no
+  # main.yml). Aplicar as duas declarações juntas num mesmo kubectl apply
+  # corrompia o patch calculado pro recurso seguinte no stream (erro real:
+  # "unknown field spec" ao atualizar o secret ecr-creds, com campos vazados
+  # de um HorizontalPodAutoscaler).
+  - target:
+      kind: Secret
+      name: mechanicltda-secrets
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: mechanicltda-secrets
+        namespace: mechanicltda

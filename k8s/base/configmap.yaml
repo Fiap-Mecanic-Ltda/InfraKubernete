@@ -1,0 +1,14 @@
+# Configuração não sensível, compartilhada pelos hosts API e Web.
+# Segredos (senhas, chaves) NÃO vão aqui — ver secret.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mechanicltda-config
+  namespace: mechanicltda
+  labels:
+    app.kubernetes.io/part-of: mechanicltda
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  JwtSettings__Issuer: "MechanicLtda.API"
+  JwtSettings__Audience: "MechanicLtda.Clients"
+  JwtSettings__ExpiracaoMinutos: "60"
