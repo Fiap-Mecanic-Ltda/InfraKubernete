@@ -25,6 +25,16 @@ variable "github_repositories" {
   ]
 }
 
+# Branches cujos workflows podem assumir a role de CI/CD. O sub claim do OIDC
+# carrega a ref do job, então cada branch que dispara pipeline precisa constar
+# aqui — "homolog" é a branch de trabalho atual, enquanto a "main" segue como
+# alvo final.
+variable "github_branches" {
+  type        = list(string)
+  description = "Branches autorizadas a assumir a role de CI/CD via OIDC."
+  default     = ["main", "homolog"]
+}
+
 # Rede
 
 variable "vpc_cidr" {
