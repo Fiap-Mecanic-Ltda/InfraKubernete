@@ -16,13 +16,26 @@ variable "environment" {
 # Depois da separação dos repositórios, dois projetos usam a mesma role: o da
 # aplicação (build/push das imagens no ECR) e este, de infra (deploy dos
 # manifestos no k3s via SSM). Os dois precisam constar no trust policy do OIDC.
+#
+# O ID numérico de cada repositório entra junto porque a organização usa
+# immutable subject claims: o sub do token OIDC chega como
+# "repo:OWNER@<owner_id>/REPO@<repo_id>:ref:..." em vez de apenas os nomes.
+# Consulte o ID em https://api.github.com/repos/<owner>/<repo> (campo "id").
 variable "github_repositories" {
-  type        = list(string)
-  description = "Repositórios GitHub (owner/repo) autorizados a assumir a role de CI/CD via OIDC."
-  default = [
-    "Fiap-Mecanic-Ltda/MechanicLtda",
-    "Fiap-Mecanic-Ltda/InfraKubernete",
-  ]
+  type        = map(number)
+  description = "Repositórios GitHub (owner/repo => ID numérico) autorizados a assumir a role de CI/CD via OIDC."
+  default = {
+    "Fiap-Mecanic-Ltda/MechanicLtda"   = 1200845101
+    "Fiap-Mecanic-Ltda/InfraKubernete" = 1360727713
+  }
+}
+
+# ID numérico da organização, que compõe o mesmo sub claim imutável.
+# https://api.github.com/orgs/Fiap-Mecanic-Ltda (campo "id").
+variable "github_owner_id" {
+  type        = number
+  description = "ID numérico da organização dona dos repositórios no GitHub."
+  default     = 273456374
 }
 
 # Branches cujos workflows podem assumir a role de CI/CD. O sub claim do OIDC

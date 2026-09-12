@@ -4,6 +4,33 @@
 # "token.actions.githubusercontent.com", importe o recurso existente em vez
 # de tentar criar um novo (`terraform import aws_iam_openid_connect_provider.github ...`).
 
+locals {
+  # Com immutable subject claims ligado na organização, o GitHub troca
+  # "owner/repo" por "owner@<owner_id>/repo@<repo_id>" dentro do sub do token.
+  # As duas formas ficam liberadas: os IDs sobrevivem a um rename do repo ou da
+  # org (o objetivo do recurso) e os nomes puros mantêm a role assumível caso a
+  # organização desligue a opção.
+  github_oidc_repo_subjects = flatten([
+    for repo, repo_id in var.github_repositories : [
+      repo,
+      format(
+        "%s@%s/%s@%s",
+        split("/", repo)[0], var.github_owner_id,
+        split("/", repo)[1], repo_id,
+      ),
+    ]
+  ])
+
+  # Cada repositório é liberado nas branches de CI/CD e nos jobs que referenciam
+  # o Environment "production" (o GitHub troca o formato do sub nesse caso).
+  github_oidc_subjects = flatten([
+    for repo in local.github_oidc_repo_subjects : concat(
+      [for branch in var.github_branches : "repo:${repo}:ref:refs/heads/${branch}"],
+      ["repo:${repo}:environment:production"]
+    )
+  ])
+}
+
 data "tls_certificate" "github_actions" {
   url = "https://token.actions.githubusercontent.com/.well-known/openid-configuration"
 }
@@ -32,17 +59,11 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
 
     # Restringe a role aos workflows dos repositórios autorizados rodando em uma
     # das branches liberadas (push/workflow_dispatch) OU em jobs que referenciam
-    # o Environment "production" (o GitHub troca o formato do sub claim nesse
-    # caso).
+    # o Environment "production".
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values = flatten([
-        for repo in var.github_repositories : concat(
-          [for branch in var.github_branches : "repo:${repo}:ref:refs/heads/${branch}"],
-          ["repo:${repo}:environment:production"]
-        )
-      ])
+      values   = local.github_oidc_subjects
     }
   }
 }
