@@ -6,12 +6,13 @@ manifestos que rodam a aplicação nele.
 
 ## Os quatro repositórios do projeto
 
-| # | Repositório | Conteúdo | CI/CD |
-|---|---|---|---|
-| 1 | [Lambda](https://github.com/Fiap-Mecanic-Ltda/Lambda) | Function serverless (API Gateway + Lambda) que emite o JWT | build, testes e deploy da função |
-| 2 | **InfraKubernete** (este) | `infra/` (Terraform do cluster) + `k8s/` (Kustomize) | `terraform plan/apply` + deploy no k3s |
-| 3 | [InfraSGBD](https://github.com/Fiap-Mecanic-Ltda/InfraSGBD) | Terraform do RDS SQL Server + connection string no SSM | `terraform plan/apply` |
-| 4 | [MechanicLtda](https://github.com/Fiap-Mecanic-Ltda/MechanicLtda) | Aplicação .NET 9 (`src/`, `tests/`, Dockerfiles) | build, testes e push das imagens no ECR |
+
+| # | Repositório                                                      | Conteúdo                                                  | CI/CD                                   |
+| - | ----------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------- |
+| 1 | [Lambda](https://github.com/Fiap-Mecanic-Ltda/Lambda)             | Function serverless (API Gateway + Lambda) que emite o JWT | build, testes e deploy da função      |
+| 2 | **InfraKubernete** (este)                                         | `infra/` (Terraform do cluster) + `k8s/` (Kustomize)       | `terraform plan/apply` + deploy no k3s  |
+| 3 | [InfraSGBD](https://github.com/Fiap-Mecanic-Ltda/InfraSGBD)       | Terraform do RDS SQL Server + connection string no SSM     | `terraform plan/apply`                  |
+| 4 | [MechanicLtda](https://github.com/Fiap-Mecanic-Ltda/MechanicLtda) | Aplicação .NET 9 (`src/`, `tests/`, Dockerfiles)         | build, testes e push das imagens no ECR |
 
 O contrato entre o repositório 4 e este é o **ECR**: a aplicação publica as imagens
 (`mechanicltda-api` / `mechanicltda-web`, tags `latest` + SHA do commit) e o deploy daqui aplica a
@@ -88,14 +89,15 @@ que depende dos outputs daqui.
 
 (Settings → Secrets and variables → Actions)
 
-| Nome | Tipo | Usado por | Uso |
-|---|---|---|---|
-| `AWS_ACCESS_KEY_ID` | Secret | `terraform.yml` | Chave do usuário `terraform-deployer` |
-| `AWS_SECRET_ACCESS_KEY` | Secret | `terraform.yml` | idem |
-| `JWT_SECRET_KEY` | Secret | `terraform.yml` | `TF_VAR_jwt_secret_key` |
-| `ENCRYPTION_KEY` | Secret | `terraform.yml` | `TF_VAR_encryption_cpf_cnpj_key` |
-| `EMAIL_PASSWORD` | Secret | `terraform.yml` | `TF_VAR_email_password` |
-| `AWS_ROLE_ARN` | Secret | `deploy.yml` | Output `github_actions_role_arn` do Terraform |
+
+| Nome                    | Tipo   | Usado por       | Uso                                          |
+| ----------------------- | ------ | --------------- | -------------------------------------------- |
+| `AWS_ACCESS_KEY_ID`     | Secret | `terraform.yml` | Chave do usuário`terraform-deployer`        |
+| `AWS_SECRET_ACCESS_KEY` | Secret | `terraform.yml` | idem                                         |
+| `JWT_SECRET_KEY`        | Secret | `terraform.yml` | `TF_VAR_jwt_secret_key`                      |
+| `ENCRYPTION_KEY`        | Secret | `terraform.yml` | `TF_VAR_encryption_cpf_cnpj_key`             |
+| `EMAIL_PASSWORD`        | Secret | `terraform.yml` | `TF_VAR_email_password`                      |
+| `AWS_ROLE_ARN`          | Secret | `deploy.yml`    | Output`github_actions_role_arn` do Terraform |
 
 O Environment `production` (Settings → Environments) precisa existir para o job de `apply`.
 
@@ -127,7 +129,7 @@ puros. Consulte o ID em `https://api.github.com/repos/<owner>/<repo>` (campo `id
 organização em `https://api.github.com/orgs/<owner>` (`github_owner_id`). O trust policy publica as
 duas formas de `sub`, então a role continua assumível caso a organização desligue a opção.
 
-Para descobrir o `sub` exato que a AWS recebeu numa falha, consulte o CloudTrail:
+Para descobrir o `sub` exato que a AWS recebeu numa falha, consulte o CloudTrail: 
 
 ```bash
 aws cloudtrail lookup-events \
