@@ -43,7 +43,14 @@ resource "aws_autoscaling_group" "worker" {
   min_size            = var.worker_min_size
   max_size            = var.worker_max_size
   desired_capacity    = var.worker_desired_capacity
-  health_check_type   = "EC2"
+  # Continua EC2 (e não ELB): o health check do target group mede a saúde do
+  # pod da API, e um nó sem pod agendado no momento não é um nó doente — com
+  # health_check_type = "ELB" o ASG substituiria a instância por engano.
+  health_check_type = "EC2"
+
+  # Todo worker entra no target group do ALB interno: o Service é NodePort, logo
+  # qualquer nó atende a API, independente de onde o pod está.
+  target_group_arns = [aws_lb_target_group.api.arn]
 
   launch_template {
     id      = aws_launch_template.worker.id

@@ -49,6 +49,13 @@ spec:
                 secretKeyRef:
                   name: mechanicltda-secrets
                   key: ENCRYPTION_KEY
+            # Indice cego do CPF/CNPJ: mesmo valor usado pela Lambda de
+            # autenticacao, senao o hash gravado aqui nao casa com o consultado la.
+            - name: Encryption__CpfCnpjHashKey
+              valueFrom:
+                secretKeyRef:
+                  name: mechanicltda-secrets
+                  key: CPF_HASH_KEY
             - name: EmailSettings__Password
               valueFrom:
                 secretKeyRef:

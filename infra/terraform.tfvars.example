@@ -4,7 +4,18 @@
 
 ec2_key_pair_name = "mechanicltda-prod"
 
-# Minimo 32 caracteres em jwt_secret_key e encryption_cpf_cnpj_key.
+# Minimo 32 caracteres em jwt_secret_key, encryption_cpf_cnpj_key e cpf_hash_key.
 jwt_secret_key          = "CHANGE_ME_JWT_SECRET_MIN_32_CHARS"
 encryption_cpf_cnpj_key = "CHANGE_ME_ENCRYPTION_KEY_MIN_32_CHARS"
 email_password          = "CHANGE_ME_GMAIL_APP_PASSWORD"
+
+# Indice cego do CPF/CNPJ: precisa ser o MESMO valor configurado na Lambda de
+# autenticacao - a aplicacao grava o hash e a funcao consulta por ele.
+cpf_hash_key = "CHANGE_ME_CPF_HASH_KEY_MIN_32_CHARS"
+
+# Depois que o API Gateway estiver no ar, aponte os links de aprovacao de OS
+# para a URL dele (output api_endpoint do stack da Lambda):
+# app_base_url_aprovacao = "https://xxxxxxxx.execute-api.us-east-1.amazonaws.com"
+
+# Apos validar o gateway em producao, feche o acesso publico aos NodePorts:
+# expose_nodeport_publicly = false

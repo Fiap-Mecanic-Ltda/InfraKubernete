@@ -52,3 +52,27 @@ output "worker_security_group_id" {
   description = "SG dos workers k3s - um pod da API pode ser agendado em qualquer no."
   value       = aws_security_group.worker.id
 }
+
+# ── Consumidos pelo stack da Lambda (API Gateway) ────────────────────────────
+# O repositório Lambda lê estes outputs via terraform_remote_state para criar o
+# VPC Link e a integração privada do HTTP API apontando para este ALB.
+
+output "alb_listener_arn" {
+  description = "Listener HTTP do ALB interno - alvo da integracao privada do API Gateway."
+  value       = aws_lb_listener.http.arn
+}
+
+output "alb_dns_name" {
+  description = "DNS interno do ALB (resolve so dentro da VPC)."
+  value       = aws_lb.internal.dns_name
+}
+
+output "alb_security_group_id" {
+  description = "SG do ALB interno."
+  value       = aws_security_group.alb.id
+}
+
+output "app_subnet_ids" {
+  description = "Sub-redes de aplicacao onde ficam o ALB interno e as ENIs do VPC Link."
+  value       = [aws_subnet.app_a.id, aws_subnet.app_b.id]
+}

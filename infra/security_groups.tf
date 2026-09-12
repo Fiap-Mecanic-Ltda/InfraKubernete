@@ -3,20 +3,29 @@ resource "aws_security_group" "ec2" {
   description = "SG da instancia EC2 que roda a API"
   vpc_id      = aws_vpc.main.id
 
-  ingress {
-    description = "API HTTP (NodePort k3s)"
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = [var.api_allowed_cidr]
+  # Acesso público direto aos NodePorts (8080 API, 8090 Web). Continua ligado
+  # durante a virada para o API Gateway, para não interromper o ambiente
+  # enquanto o gateway é validado; depois do smoke test, basta
+  # expose_nodeport_publicly = false e o gateway passa a ser a única entrada.
+  dynamic "ingress" {
+    for_each = var.expose_nodeport_publicly ? [8080, 8090] : []
+
+    content {
+      description = "NodePort k3s publico (porta ${ingress.value})"
+      from_port   = ingress.value
+      to_port     = ingress.value
+      protocol    = "tcp"
+      cidr_blocks = [var.api_allowed_cidr]
+    }
   }
 
+  # Caminho definitivo: API Gateway -> VPC Link -> ALB interno -> NodePort 8080.
   ingress {
-    description = "Web HTTP (NodePort k3s)"
-    from_port   = 8090
-    to_port     = 8090
-    protocol    = "tcp"
-    cidr_blocks = [var.api_allowed_cidr]
+    description     = "API (NodePort 8080) a partir do ALB interno"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
   }
 
   # TEMPORÁRIO: SSH liberado só para investigar por que o amazon-ssm-agent
@@ -81,9 +90,20 @@ resource "aws_security_group" "k3s_mesh" {
 }
 
 resource "aws_security_group" "worker" {
+  # O ingress do ALB entra aqui porque o target group aponta para o NodePort de
+  # todos os nós (o ASG registra os workers), e um pod da API pode estar em
+  # qualquer um deles.
   name        = "${var.project_name}-${var.environment}-worker-sg"
   description = "SG base dos workers k3s (ingress entre nos vem do k3s_mesh)"
   vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "API (NodePort 8080) a partir do ALB interno"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
 
   egress {
     from_port   = 0
