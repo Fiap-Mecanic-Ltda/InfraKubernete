@@ -81,7 +81,7 @@ data "aws_iam_policy_document" "deploy_manifest_read" {
     sid       = "DeployManifestGet"
     effect    = "Allow"
     actions   = ["s3:GetObject"]
-    resources = ["arn:aws:s3:::mechanicltda-terraform-state-430606112709/deploy/*"]
+    resources = ["arn:aws:s3:::mechanicltda-terraform-state-788516091173/deploy/*"]
   }
 }
 

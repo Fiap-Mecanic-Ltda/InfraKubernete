@@ -14,7 +14,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket       = "mechanicltda-terraform-state-430606112709"
+    bucket       = "mechanicltda-terraform-state-788516091173"
     key          = "prod/terraform.tfstate"
     region       = "us-east-1"
     encrypt      = true
