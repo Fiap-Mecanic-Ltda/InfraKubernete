@@ -115,7 +115,23 @@ autenticam via OIDC.
 
 ## Trust policy do OIDC
 
-`infra/variables.tf` → `github_repositories` lista os repositórios autorizados a assumir a role.
-Ao adicionar um repositório novo (a Lambda, por exemplo) ou renomear um existente, atualize essa
-lista e rode `terraform apply` — sem isso o job correspondente falha no
+`infra/variables.tf` → `github_repositories` mapeia os repositórios autorizados a assumir a role
+(`owner/repo` → ID numérico) e `github_branches` lista as branches liberadas. Ao adicionar um
+repositório novo (a Lambda, por exemplo) ou uma branch que dispara pipeline, atualize essas
+variáveis e rode `terraform apply` — sem isso o job correspondente falha no
 `configure-aws-credentials` com erro de `sts:AssumeRoleWithWebIdentity`.
+
+O ID numérico é obrigatório porque a organização usa **immutable subject claims**: o `sub` do token
+OIDC chega como `repo:OWNER@<owner_id>/REPO@<repo_id>:ref:refs/heads/<branch>`, e não com os nomes
+puros. Consulte o ID em `https://api.github.com/repos/<owner>/<repo>` (campo `id`) e o da
+organização em `https://api.github.com/orgs/<owner>` (`github_owner_id`). O trust policy publica as
+duas formas de `sub`, então a role continua assumível caso a organização desligue a opção.
+
+Para descobrir o `sub` exato que a AWS recebeu numa falha, consulte o CloudTrail:
+
+```bash
+aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=AssumeRoleWithWebIdentity \
+  --region us-east-1 --max-results 5 \
+  --query 'Events[].CloudTrailEvent' --output text
+```
