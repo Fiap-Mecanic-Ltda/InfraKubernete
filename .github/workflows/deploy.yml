@@ -34,7 +34,7 @@ concurrency:
 env:
   # Mesmo bucket do state remoto (infra/versions.tf) — usado só como área de
   # troca dos manifestos com a instância (prefixo deploy/).
-  STATE_BUCKET: mechanicltda-terraform-state-430606112709
+  STATE_BUCKET: mechanicltda-terraform-state-788516091173
 
 jobs:
   read-tf-vars:

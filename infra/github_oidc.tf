@@ -164,14 +164,14 @@ data "aws_iam_policy_document" "github_actions_tfstate_read" {
     sid       = "TfStateGetObject"
     effect    = "Allow"
     actions   = ["s3:GetObject"]
-    resources = ["arn:aws:s3:::mechanicltda-terraform-state-430606112709/prod/terraform.tfstate"]
+    resources = ["arn:aws:s3:::mechanicltda-terraform-state-788516091173/prod/terraform.tfstate"]
   }
 
   statement {
     sid       = "TfStateListBucket"
     effect    = "Allow"
     actions   = ["s3:ListBucket"]
-    resources = ["arn:aws:s3:::mechanicltda-terraform-state-430606112709"]
+    resources = ["arn:aws:s3:::mechanicltda-terraform-state-788516091173"]
   }
 }
 
@@ -190,7 +190,7 @@ data "aws_iam_policy_document" "github_actions_deploy_manifest_write" {
     sid       = "DeployManifestPut"
     effect    = "Allow"
     actions   = ["s3:PutObject", "s3:DeleteObject"]
-    resources = ["arn:aws:s3:::mechanicltda-terraform-state-430606112709/deploy/*"]
+    resources = ["arn:aws:s3:::mechanicltda-terraform-state-788516091173/deploy/*"]
   }
 }
 
