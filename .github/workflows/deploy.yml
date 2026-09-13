@@ -21,6 +21,12 @@ on:
         type: string
         required: false
         default: ""
+  # Disparado pelo repositório da aplicação logo depois de publicar as imagens
+  # no ECR (push na main de lá), com a tag no payload: fecha o deploy automático
+  # de produção sem ninguém precisar rodar este workflow na mão. O GitHub sempre
+  # executa repository_dispatch a partir da branch padrão (main).
+  repository_dispatch:
+    types: [imagem-publicada]
 
 permissions:
   contents: read
@@ -86,8 +92,17 @@ jobs:
       # "latest" não traria a imagem nova para o nó.
       - name: Resolve a tag da imagem
         id: image
+        # A tag chega por variável de ambiente, e não interpolada no script: o
+        # valor vem de input manual ou do payload do repository_dispatch, e
+        # ${{ }} direto no shell permitiria injetar comandos.
+        env:
+          TAG_INFORMADA: ${{ inputs.image_tag || github.event.client_payload.image_tag }}
         run: |
-          TAG="${{ inputs.image_tag }}"
+          TAG="$TAG_INFORMADA"
+          if [ -n "$TAG" ] && ! printf '%s' "$TAG" | grep -Eq '^[A-Za-z0-9._-]{1,128}$'; then
+            echo "::error::Tag de imagem invalida: use apenas letras, digitos, '.', '_' e '-'."
+            exit 1
+          fi
           if [ -z "$TAG" ]; then
             TAG=$(aws ecr describe-images \
               --repository-name "${PROJECT_NAME}-api" \

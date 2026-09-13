@@ -1,16 +1,24 @@
 name: Terraform - Infraestrutura AWS
 
 # Provisiona a infraestrutura de Kubernetes (VPC, EC2 com k3s, ASG de workers,
-# ECR, SSM, IAM/OIDC). O RDS fica no repositorio de infra do banco gerenciado. O `plan` roda sozinho a cada mudança em infra/; o `apply` é sempre
-# manual (workflow_dispatch), porque recria recursos com custo e downtime.
+# ECR, SSM, IAM/OIDC, ALB interno). O RDS fica no repositorio de infra do banco
+# gerenciado.
+#
+# - homolog: plan a cada mudanca em infra/. Nao ha ambiente de homologacao na
+#   AWS (decisao do time), entao nada e aplicado a partir desta branch.
+# - main: plan e apply AUTOMATICO a cada mudanca em infra/. O apply pode
+#   recriar recursos com custo e downtime (ex.: mudanca em user_data recria a
+#   EC2), por isso o job usa o Environment "production": com revisores
+#   obrigatorios configurados, ele espera a aprovacao depois do plan do mesmo
+#   run.
 on:
   push:
-    branches: [main]
+    branches: [main, homolog]
     paths:
       - "infra/**"
       - ".github/workflows/terraform.yml"
   pull_request:
-    branches: [main]
+    branches: [main, homolog]
     paths:
       - "infra/**"
       - ".github/workflows/terraform.yml"
@@ -91,9 +99,18 @@ jobs:
   apply:
     name: Terraform apply
     needs: [read-tf-vars, plan]
-    if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
+    # Automatico em push na main; manual (workflow_dispatch) so a partir da
+    # main. Sem ambiente de homologacao, aplicar outra branch mexeria na
+    # infraestrutura de producao com codigo nao revisado.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && inputs.action == 'apply'))
     runs-on: ubuntu-latest
     environment: production
+    concurrency:
+      group: terraform-apply-kubernetes-prod
+      cancel-in-progress: false
     defaults:
       run:
         working-directory: infra
