@@ -154,6 +154,7 @@ jobs:
             --from-literal=CPF_HASH_KEY="$(get_param $PREFIX/cpf-hash-key)" \
             --from-literal=EmailSettings__Password="$(get_param $PREFIX/email-password)" \
             --from-literal=AppSettings__BaseUrlAprovacao="$(get_param $PREFIX/app-base-url-aprovacao)" \
+            --from-literal=AppSettings__UrlSwaggerApi="$(get_param $PREFIX/app-base-url-aprovacao)/swagger" \
             --dry-run=client -o yaml > /tmp/secret-manifest.yaml
 
           # "---" é obrigatório entre documentos concatenados manualmente - sem
