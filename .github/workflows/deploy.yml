@@ -161,6 +161,17 @@ jobs:
           PREFIX="/${PROJECT_NAME}/${ENVIRONMENT}"
           get_param() { aws ssm get-parameter --name "$1" --with-decryption --query 'Parameter.Value' --output text; }
 
+          # New Relic é opcional: sem a license key no SSM, o agente APM fica desligado
+          # (CORECLR_ENABLE_PROFILING=0) e a integração Kubernetes não é instalada.
+          NEW_RELIC_LICENSE_KEY=$(aws ssm get-parameter --name "$PREFIX/newrelic-license-key" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || true)
+          if [ -n "$NEW_RELIC_LICENSE_KEY" ]; then
+            # Vem do SSM, não de um secret do GitHub: sem a máscara, apareceria no log.
+            echo "::add-mask::$NEW_RELIC_LICENSE_KEY"
+            NEW_RELIC_PROFILING=1
+          else
+            NEW_RELIC_PROFILING=0
+          fi
+
           kubectl create secret generic mechanicltda-secrets \
             --namespace mechanicltda \
             --from-literal=ConnectionStrings__DefaultConnection="$(get_param $PREFIX/db-connection-string)" \
@@ -170,6 +181,8 @@ jobs:
             --from-literal=EmailSettings__Password="$(get_param $PREFIX/email-password)" \
             --from-literal=AppSettings__BaseUrlAprovacao="$(get_param $PREFIX/app-base-url-aprovacao)" \
             --from-literal=AppSettings__UrlSwaggerApi="$(get_param $PREFIX/app-base-url-aprovacao)/swagger" \
+            --from-literal=NEW_RELIC_LICENSE_KEY="$NEW_RELIC_LICENSE_KEY" \
+            --from-literal=NEW_RELIC_PROFILING="$NEW_RELIC_PROFILING" \
             --dry-run=client -o yaml > /tmp/secret-manifest.yaml
 
           # "---" é obrigatório entre documentos concatenados manualmente - sem
@@ -183,6 +196,25 @@ jobs:
             --docker-username=AWS \
             --docker-password="$(aws ecr get-login-password --region "$AWS_REGION")" \
             --dry-run=client -o yaml >> /tmp/secret-manifest.yaml
+
+          # Integração Kubernetes do New Relic (HelmChart do k3s) e o Secret com a
+          # license key que ela lê. Só com a license key configurada.
+          if [ "$NEW_RELIC_PROFILING" = "1" ]; then
+            {
+              echo "---"
+              kubectl create namespace newrelic --dry-run=client -o yaml
+              echo "---"
+              kubectl create secret generic newrelic-license \
+                --namespace newrelic \
+                --from-literal=licenseKey="$NEW_RELIC_LICENSE_KEY" \
+                --dry-run=client -o yaml
+              echo "---"
+              cat k8s/observabilidade/newrelic-bundle.yaml
+            } >> /tmp/secret-manifest.yaml
+            echo "Integracao Kubernetes do New Relic incluida no deploy."
+          else
+            echo "::notice::Sem newrelic-license-key no SSM: agente APM desligado e integracao Kubernetes nao instalada."
+          fi
 
       - name: Envia os manifestos para a instância via SSM e aplica
         run: |

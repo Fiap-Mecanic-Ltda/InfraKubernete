@@ -93,26 +93,76 @@ que depende dos outputs daqui.
 
 ## Pipelines
 
+Não há ambiente de homologação na AWS (decisão do time): `homolog` roda só `plan`; a `main`
+aplica automaticamente. Todo apply usa o Environment `production` — com revisores obrigatórios
+configurados, ele espera a aprovação depois do `plan` do mesmo run.
+
+| Workflow | PR e push em `homolog` | Push em `main` |
+|---|---|---|
+| `terraform.yml` (`infra/**`) | `plan` | `plan` + **`apply`** |
+| `observability.yml` (`observability/**`) | `plan` | `plan` + **`apply`** |
+| `deploy.yml` (`k8s/**`) | — | **deploy no cluster** |
+
 ### `terraform.yml`
 
 - **plan**: automático em push/PR que toquem `infra/**`; também via `workflow_dispatch`.
-- **apply**: só via `workflow_dispatch` com `action = apply`, protegido pelo Environment
-  `production`.
+- **apply**: automático em push na `main`; manual (`workflow_dispatch` com `action = apply`)
+  só a partir da `main`.
 - Autentica com a **chave estática do usuário `terraform-deployer`** (não OIDC): a role de OIDC é
   criada por este próprio apply, então no bootstrap ainda não existe nada para assumir.
 
 ### `deploy.yml`
 
-- Roda em push que toque `k8s/**` e via `workflow_dispatch` (com `image_tag` opcional).
+- Roda em push que toque `k8s/**`, via `workflow_dispatch` (com `image_tag` opcional) e via
+  **`repository_dispatch` (`imagem-publicada`)**, que o repositório da aplicação dispara logo
+  depois de publicar as imagens no ECR, com a tag no payload.
 - Autentica na AWS via **OIDC** (`secrets.AWS_ROLE_ARN`), sem access keys.
 - Sem `image_tag`, resolve sozinho a **última imagem publicada no ECR** — a tag imutável (SHA)
   em vez de `latest`, porque os Deployments usam `imagePullPolicy: IfNotPresent` e reaplicar
-  `latest` não traria a imagem nova para o nó.
+  `latest` não traria a imagem nova para o nó. A tag recebida é validada antes de ir para o
+  shell.
 - A porta 6443 do k3s nunca é exposta: os manifestos renderizados vão para o S3 e um
   `aws ssm send-command` roda `kubectl apply` **dentro** da instância.
 
-> Depois de um push na `main` do repositório da aplicação, rode o `deploy.yml`
-> (Actions → Deploy no Kubernetes → Run workflow) para levar a imagem nova ao cluster.
+> O disparo automático depende do secret `INFRA_DISPATCH_TOKEN` no repositório da aplicação.
+> Sem ele, depois de um push na `main` de lá, rode o `deploy.yml` manualmente
+> (Actions → Deploy no Kubernetes → Run workflow).
+
+### `observability.yml`
+
+Aplica o stack `observability/` (New Relic). Sem `NEW_RELIC_API_KEY` e
+`NEW_RELIC_ACCOUNT_ID` configurados, avisa e pula — não trava PRs antes de a conta existir.
+
+## Observabilidade (New Relic)
+
+| Peça | Onde | O que entrega |
+|---|---|---|
+| Agente APM .NET | Imagens da API e do Web (repositório da aplicação), ligado pelos deployments | Latência e erros por transação, trace distribuído, logs in context com o `CorrelationId` |
+| Eventos de negócio | `NewRelicMonitoramentoService` na aplicação | `OrdemServicoEvento` (criação e mudança de status), `OrdemServicoFalha`, `FalhaIntegracao` |
+| Integração Kubernetes | `k8s/observabilidade/newrelic-bundle.yaml` (HelmChart do k3s) | CPU, memória, reinícios e réplicas do HPA |
+| Alertas, painel e monitor sintético | `observability/` (Terraform, provider `newrelic`) | Ver abaixo |
+
+**Alertas** (`observability/alertas.tf`): latência p95 da API acima de 1,5 s; taxa de erro acima
+de 5%; falha de sistema no processamento de OS; falha no envio de e-mail; CPU ou memória do
+container acima de 90% do limit; container reiniciando; `/health` falhando duas vezes seguidas
+pelo gateway.
+
+**Painel** (`observability/painel.tf`), quatro páginas: *Ordens de serviço* (volume diário, tempo
+médio em Diagnóstico, Execução e Finalização, falhas), *APIs* (p50/p95/p99, transações mais
+lentas, throughput, uptime de `/health`, erros com correlação), *Integrações* (falhas de e-mail,
+exceções por tipo, tempo de banco) e *Kubernetes* (CPU e memória por pod, réplicas do HPA, CPU dos
+nós, reinícios).
+
+**Monitor sintético** (`observability/disponibilidade.tf`): ping em `/health` pela URL pública do
+gateway a cada 5 minutos, de duas regiões. Monitores de ping não consomem a cota do plano
+gratuito.
+
+Tudo é opcional até a license key existir: sem `NEW_RELIC_LICENSE_KEY`, o deploy sobe a aplicação
+com o agente desligado e não instala a integração Kubernetes.
+
+> Os nós são `t3.small`. O agente acrescenta memória aos pods da API e do Web (limit atual de
+> 384 Mi) e a integração Kubernetes roda um DaemonSet por nó, em `lowDataMode`. Acompanhe o
+> widget de memória por pod depois de ligar.
 
 ## Secrets e variáveis necessários neste repositório
 
@@ -127,6 +177,10 @@ que depende dos outputs daqui.
 | `CPF_HASH_KEY` | Secret | `terraform.yml` | `TF_VAR_cpf_hash_key` — índice cego do CPF, **mesmo valor** configurado na Lambda |
 | `EMAIL_PASSWORD` | Secret | `terraform.yml` | `TF_VAR_email_password` |
 | `AWS_ROLE_ARN` | Secret | `deploy.yml` | Output `github_actions_role_arn` do Terraform |
+| `NEW_RELIC_LICENSE_KEY` | Secret (opcional) | `terraform.yml` | License key (ingest) — vai para o SSM e liga o agente APM e a integração Kubernetes |
+| `NEW_RELIC_API_KEY` | Secret (opcional) | `observability.yml` | User API key (`NRAK-...`) para criar alertas, painel e monitor |
+| `NEW_RELIC_ACCOUNT_ID` | Secret (opcional) | `observability.yml` | ID da conta do New Relic |
+| `EMAIL_ALERTAS` | Variable (opcional) | `observability.yml` | E-mail que recebe os incidentes |
 
 O Environment `production` (Settings → Environments) precisa existir para o job de `apply`.
 

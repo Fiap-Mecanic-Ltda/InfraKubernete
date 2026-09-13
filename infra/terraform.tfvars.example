@@ -14,8 +14,12 @@ email_password          = "CHANGE_ME_GMAIL_APP_PASSWORD"
 cpf_hash_key = "CHANGE_ME_CPF_HASH_KEY_MIN_32_CHARS"
 
 # Depois que o API Gateway estiver no ar, aponte os links de aprovacao de OS
-# para a URL dele (output api_endpoint do stack da Lambda):
+# para a URL dele (output api_base_url do stack da Lambda):
 # app_base_url_aprovacao = "https://xxxxxxxx.execute-api.us-east-1.amazonaws.com"
 
 # Apos validar o gateway em producao, feche o acesso publico aos NodePorts:
 # expose_nodeport_publicly = false
+
+# Opcional: license key (ingest) do New Relic. Sem ela a aplicacao sobe com o agente
+# APM desligado e a integracao Kubernetes nao e instalada.
+# newrelic_license_key = "CHANGE_ME_NEW_RELIC_LICENSE_KEY"

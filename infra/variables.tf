@@ -199,3 +199,16 @@ variable "cpf_hash_key" {
   EOT
   sensitive   = true
 }
+
+# Observabilidade
+
+variable "newrelic_license_key" {
+  type        = string
+  description = <<-EOT
+    License key (ingest) do New Relic, usada pelo agente APM dos pods e pela
+    integração Kubernetes. Opcional: vazia, o parâmetro no SSM não é criado e o
+    deploy sobe a aplicação com o agente desligado.
+  EOT
+  sensitive   = true
+  default     = ""
+}
