@@ -25,12 +25,13 @@ O contrato entre este e o repositório 3 é o **state remoto**: o stack do banco
 
 ```text
 InfraKubernete/
-├── infra/                 # Terraform: VPC, EC2 (k3s), ASG de workers, ECR, SSM, IAM/OIDC
-│   ├── network.tf         # VPC, subnets (pública + as duas de banco), IGW, rotas
+├── infra/                 # Terraform: VPC, EC2 (k3s), ASG de workers, ALB interno, ECR, SSM, IAM/OIDC
+│   ├── network.tf         # VPC, subnets (pública, as duas de banco e as duas de aplicação), IGW, rotas
 │   ├── ec2.tf             # Instância do control plane do k3s + EIP
-│   ├── asg.tf             # Auto Scaling Group dos workers k3s
+│   ├── asg.tf             # Auto Scaling Group dos workers k3s (registrados no target group)
+│   ├── alb.tf             # ALB interno + target group do NodePort 8080 (entrada do API Gateway)
 │   ├── ecr.tf             # Repositórios de imagem (api e web)
-│   ├── security_groups.tf # SGs da EC2, dos workers e da malha k3s
+│   ├── security_groups.tf # SGs da EC2, dos workers, da malha k3s e do ALB
 │   ├── ssm.tf             # Segredos da aplicação (SecureString) e prefixo /projeto/ambiente
 │   ├── iam.tf             # Role/instance profile das instâncias, acesso via Session Manager
 │   ├── github_oidc.tf     # OIDC + role assumida pelas pipelines dos repositórios 2 e 4
@@ -46,6 +47,35 @@ O que **não** está aqui: o RDS (repositório 3), a Lambda (repositório 1) e o
 aplicação (repositório 4).
 
 Detalhes dos manifestos, do fluxo de deploy e das decisões de design: **[k8s/README.md](k8s/README.md)**.
+
+## Entrada de tráfego (API Gateway → ALB interno → k3s)
+
+A partir da Fase 3 a aplicação não é mais consumida pelo IP público da EC2. O caminho é:
+
+```text
+internet ──HTTPS──▶ API Gateway (repositório 1) ──VPC Link──▶ ALB interno :80
+                                                                   │
+                                                          NodePort 8080 (qualquer nó k3s)
+                                                                   │
+                                                              pods da API
+```
+
+O que este repositório provê:
+
+| Recurso | Arquivo | Para quê |
+|---|---|---|
+| Sub-redes `app_a` e `app_b` (`10.0.4.0/24`, `10.0.5.0/24`) | `infra/network.tf` | ALB interno e ENIs do VPC Link. Sem rota para a internet — a VPC continua sem NAT |
+| ALB interno + target group `:8080` com health check `/health` | `infra/alb.tf` | Alvo da integração privada do API Gateway |
+| Ingress `8080` nos SGs dos nós a partir do SG do ALB | `infra/security_groups.tf` | Fecha o backend: só o ALB alcança o NodePort |
+| Outputs `alb_listener_arn`, `app_subnet_ids`, `alb_security_group_id` | `infra/outputs.tf` | Lidos pelo stack da Lambda via `terraform_remote_state` |
+| Parâmetro SSM `cpf-hash-key` | `infra/ssm.tf` | Índice cego do CPF: a aplicação grava o hash, a Lambda consulta por ele |
+
+### Virada em duas etapas
+
+`expose_nodeport_publicly` (default `true`) mantém as portas `8080` e `8090` abertas durante a
+virada. Depois de validar o gateway em produção, rode o apply com `expose_nodeport_publicly =
+false`: a API deixa de responder fora da VPC e o gateway se torna a única entrada. O Web (`8090`)
+continua publicado direto — colocá-lo atrás do gateway é uma decisão em aberto.
 
 ## Como rodar o Terraform localmente
 
@@ -63,26 +93,76 @@ que depende dos outputs daqui.
 
 ## Pipelines
 
+Não há ambiente de homologação na AWS (decisão do time): `homolog` roda só `plan`; a `main`
+aplica automaticamente. Todo apply usa o Environment `production` — com revisores obrigatórios
+configurados, ele espera a aprovação depois do `plan` do mesmo run.
+
+| Workflow | PR e push em `homolog` | Push em `main` |
+|---|---|---|
+| `terraform.yml` (`infra/**`) | `plan` | `plan` + **`apply`** |
+| `observability.yml` (`observability/**`) | `plan` | `plan` + **`apply`** |
+| `deploy.yml` (`k8s/**`) | — | **deploy no cluster** |
+
 ### `terraform.yml`
 
 - **plan**: automático em push/PR que toquem `infra/**`; também via `workflow_dispatch`.
-- **apply**: só via `workflow_dispatch` com `action = apply`, protegido pelo Environment
-  `production`.
+- **apply**: automático em push na `main`; manual (`workflow_dispatch` com `action = apply`)
+  só a partir da `main`.
 - Autentica com a **chave estática do usuário `terraform-deployer`** (não OIDC): a role de OIDC é
   criada por este próprio apply, então no bootstrap ainda não existe nada para assumir.
 
 ### `deploy.yml`
 
-- Roda em push que toque `k8s/**` e via `workflow_dispatch` (com `image_tag` opcional).
+- Roda em push que toque `k8s/**`, via `workflow_dispatch` (com `image_tag` opcional) e via
+  **`repository_dispatch` (`imagem-publicada`)**, que o repositório da aplicação dispara logo
+  depois de publicar as imagens no ECR, com a tag no payload.
 - Autentica na AWS via **OIDC** (`secrets.AWS_ROLE_ARN`), sem access keys.
 - Sem `image_tag`, resolve sozinho a **última imagem publicada no ECR** — a tag imutável (SHA)
   em vez de `latest`, porque os Deployments usam `imagePullPolicy: IfNotPresent` e reaplicar
-  `latest` não traria a imagem nova para o nó.
+  `latest` não traria a imagem nova para o nó. A tag recebida é validada antes de ir para o
+  shell.
 - A porta 6443 do k3s nunca é exposta: os manifestos renderizados vão para o S3 e um
   `aws ssm send-command` roda `kubectl apply` **dentro** da instância.
 
-> Depois de um push na `main` do repositório da aplicação, rode o `deploy.yml`
-> (Actions → Deploy no Kubernetes → Run workflow) para levar a imagem nova ao cluster.
+> O disparo automático depende do secret `INFRA_DISPATCH_TOKEN` no repositório da aplicação.
+> Sem ele, depois de um push na `main` de lá, rode o `deploy.yml` manualmente
+> (Actions → Deploy no Kubernetes → Run workflow).
+
+### `observability.yml`
+
+Aplica o stack `observability/` (New Relic). Sem `NEW_RELIC_API_KEY` e
+`NEW_RELIC_ACCOUNT_ID` configurados, avisa e pula — não trava PRs antes de a conta existir.
+
+## Observabilidade (New Relic)
+
+| Peça | Onde | O que entrega |
+|---|---|---|
+| Agente APM .NET | Imagens da API e do Web (repositório da aplicação), ligado pelos deployments | Latência e erros por transação, trace distribuído, logs in context com o `CorrelationId` |
+| Eventos de negócio | `NewRelicMonitoramentoService` na aplicação | `OrdemServicoEvento` (criação e mudança de status), `OrdemServicoFalha`, `FalhaIntegracao` |
+| Integração Kubernetes | `k8s/observabilidade/newrelic-bundle.yaml` (HelmChart do k3s) | CPU, memória, reinícios e réplicas do HPA |
+| Alertas, painel e monitor sintético | `observability/` (Terraform, provider `newrelic`) | Ver abaixo |
+
+**Alertas** (`observability/alertas.tf`): latência p95 da API acima de 1,5 s; taxa de erro acima
+de 5%; falha de sistema no processamento de OS; falha no envio de e-mail; CPU ou memória do
+container acima de 90% do limit; container reiniciando; `/health` falhando duas vezes seguidas
+pelo gateway.
+
+**Painel** (`observability/painel.tf`), quatro páginas: *Ordens de serviço* (volume diário, tempo
+médio em Diagnóstico, Execução e Finalização, falhas), *APIs* (p50/p95/p99, transações mais
+lentas, throughput, uptime de `/health`, erros com correlação), *Integrações* (falhas de e-mail,
+exceções por tipo, tempo de banco) e *Kubernetes* (CPU e memória por pod, réplicas do HPA, CPU dos
+nós, reinícios).
+
+**Monitor sintético** (`observability/disponibilidade.tf`): ping em `/health` pela URL pública do
+gateway a cada 5 minutos, de duas regiões. Monitores de ping não consomem a cota do plano
+gratuito.
+
+Tudo é opcional até a license key existir: sem `NEW_RELIC_LICENSE_KEY`, o deploy sobe a aplicação
+com o agente desligado e não instala a integração Kubernetes.
+
+> Os nós são `t3.small`. O agente acrescenta memória aos pods da API e do Web (limit atual de
+> 384 Mi) e a integração Kubernetes roda um DaemonSet por nó, em `lowDataMode`. Acompanhe o
+> widget de memória por pod depois de ligar.
 
 ## Secrets e variáveis necessários neste repositório
 
@@ -94,8 +174,13 @@ que depende dos outputs daqui.
 | `AWS_SECRET_ACCESS_KEY` | Secret | `terraform.yml` | idem |
 | `JWT_SECRET_KEY` | Secret | `terraform.yml` | `TF_VAR_jwt_secret_key` |
 | `ENCRYPTION_KEY` | Secret | `terraform.yml` | `TF_VAR_encryption_cpf_cnpj_key` |
+| `CPF_HASH_KEY` | Secret | `terraform.yml` | `TF_VAR_cpf_hash_key` — índice cego do CPF, **mesmo valor** configurado na Lambda |
 | `EMAIL_PASSWORD` | Secret | `terraform.yml` | `TF_VAR_email_password` |
 | `AWS_ROLE_ARN` | Secret | `deploy.yml` | Output `github_actions_role_arn` do Terraform |
+| `NEW_RELIC_LICENSE_KEY` | Secret (opcional) | `terraform.yml` | License key (ingest) — vai para o SSM e liga o agente APM e a integração Kubernetes |
+| `NEW_RELIC_API_KEY` | Secret (opcional) | `observability.yml` | User API key (`NRAK-...`) para criar alertas, painel e monitor |
+| `NEW_RELIC_ACCOUNT_ID` | Secret (opcional) | `observability.yml` | ID da conta do New Relic |
+| `EMAIL_ALERTAS` | Variable (opcional) | `observability.yml` | E-mail que recebe os incidentes |
 
 O Environment `production` (Settings → Environments) precisa existir para o job de `apply`.
 
@@ -109,6 +194,10 @@ defaults direto de `infra/variables.tf` (fonte única de verdade).
    a connection string no SSM.
 3. Push na `main` do **repositório da aplicação** — publica as imagens no ECR.
 4. `deploy.yml` **aqui** — aplica os manifestos e sobe a aplicação no cluster.
+5. `terraform apply` no **[Lambda](https://github.com/Fiap-Mecanic-Ltda/Lambda)** — cria o API
+   Gateway e o VPC Link apontando para o `alb_listener_arn` deste stack.
+6. Validado o gateway, rode o apply daqui com `expose_nodeport_publicly = false` e
+   `app_base_url_aprovacao` igual à URL do gateway.
 
 Entre 1 e 3, cadastre `AWS_ROLE_ARN` (output `github_actions_role_arn`) nos repositórios que
 autenticam via OIDC.

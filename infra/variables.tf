@@ -153,3 +153,62 @@ variable "email_password" {
   description = "Senha de app do Gmail para envio de e-mails via SMTP."
   sensitive   = true
 }
+
+# Sub-redes de aplicação (ALB interno e ENIs do VPC Link)
+
+variable "app_subnet_a_cidr" {
+  type        = string
+  description = "CIDR da sub-rede de aplicacao na primeira AZ (ALB interno e VPC Link)."
+  default     = "10.0.4.0/24"
+}
+
+variable "app_subnet_b_cidr" {
+  type        = string
+  description = "CIDR da sub-rede de aplicacao na segunda AZ. O ALB exige duas AZs."
+  default     = "10.0.5.0/24"
+}
+
+variable "expose_nodeport_publicly" {
+  type        = bool
+  description = <<-EOT
+    Mantém as portas 8080 (API) e 8090 (Web) abertas para var.api_allowed_cidr.
+    Fica `true` durante a virada para o API Gateway, para não interromper o
+    ambiente enquanto o gateway é validado. Depois do smoke test, passe para
+    `false`: a API deixa de ser acessível fora da VPC e o gateway se torna a
+    única entrada.
+  EOT
+  default     = true
+}
+
+variable "app_base_url_aprovacao" {
+  type        = string
+  description = <<-EOT
+    URL base dos links de aprovacao de OS enviados por e-mail. Vazio mantém o
+    IP público da EC2 (comportamento das fases anteriores). Depois que o API
+    Gateway estiver no ar, aponte para a URL dele (HTTPS).
+  EOT
+  default     = ""
+}
+
+variable "cpf_hash_key" {
+  type        = string
+  description = <<-EOT
+    Chave do índice cego (HMAC-SHA256) do CPF/CNPJ. Precisa ser o mesmo valor
+    usado pela Lambda de autenticação: o hash gravado pela aplicação é o mesmo
+    que a função consulta. Mínimo de 32 caracteres.
+  EOT
+  sensitive   = true
+}
+
+# Observabilidade
+
+variable "newrelic_license_key" {
+  type        = string
+  description = <<-EOT
+    License key (ingest) do New Relic, usada pelo agente APM dos pods e pela
+    integração Kubernetes. Opcional: vazia, o parâmetro no SSM não é criado e o
+    deploy sobe a aplicação com o agente desligado.
+  EOT
+  sensitive   = true
+  default     = ""
+}

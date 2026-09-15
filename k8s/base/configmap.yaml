@@ -10,5 +10,16 @@ metadata:
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   JwtSettings__Issuer: "MechanicLtda.API"
+  # Segundo emissor aceito pela API: a Lambda de autenticacao por CPF.
+  JwtSettings__IssuerCpf: "MechanicLtda.Auth.Cpf"
+
+  # Agente APM do New Relic (só coleta com NEW_RELIC_LICENSE_KEY, que vem do Secret).
+  # Logs in context: o agente encaminha os logs da aplicação com o trace e os escopos,
+  # entre eles o CorrelationId do API Gateway.
+  NEW_RELIC_DISTRIBUTED_TRACING_ENABLED: "true"
+  NEW_RELIC_APPLICATION_LOGGING_ENABLED: "true"
+  NEW_RELIC_APPLICATION_LOGGING_FORWARDING_ENABLED: "true"
+  NEW_RELIC_APPLICATION_LOGGING_FORWARDING_CONTEXT_DATA_ENABLED: "true"
+  NEW_RELIC_LABELS: "ambiente:prod;projeto:mechanicltda"
   JwtSettings__Audience: "MechanicLtda.Clients"
   JwtSettings__ExpiracaoMinutos: "60"

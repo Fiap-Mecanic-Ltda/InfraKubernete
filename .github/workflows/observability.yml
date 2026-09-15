@@ -1,0 +1,130 @@
+name: Terraform - Observabilidade (New Relic)
+
+# Alertas, painel, monitor sintetico e notificacoes no New Relic, declarados em
+# observability/. Stack separado do infra/: outro provider, outra credencial.
+#
+# - homolog: plan a cada mudanca em observability/.
+# - main: plan e apply automatico (Environment "production").
+#
+# Sem os secrets do New Relic configurados o workflow nao falha: avisa e pula,
+# para nao travar PRs antes de a conta existir.
+on:
+  push:
+    branches: [main, homolog]
+    paths:
+      - "observability/**"
+      - ".github/workflows/observability.yml"
+  pull_request:
+    branches: [main, homolog]
+    paths:
+      - "observability/**"
+      - ".github/workflows/observability.yml"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "O que rodar (apply exige aprovação do Environment production)"
+        type: choice
+        default: plan
+        options: [plan, apply]
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  TF_VAR_newrelic_account_id: ${{ secrets.NEW_RELIC_ACCOUNT_ID }}
+  TF_VAR_newrelic_api_key: ${{ secrets.NEW_RELIC_API_KEY }}
+  TF_VAR_email_alertas: ${{ vars.EMAIL_ALERTAS }}
+
+jobs:
+  verifica-credenciais:
+    name: Verifica credenciais do New Relic
+    runs-on: ubuntu-latest
+    outputs:
+      configurado: ${{ steps.check.outputs.configurado }}
+    steps:
+      - name: Checa os secrets
+        id: check
+        run: |
+          if [ -z "$TF_VAR_newrelic_api_key" ] || [ -z "$TF_VAR_newrelic_account_id" ]; then
+            echo "::notice::NEW_RELIC_API_KEY e NEW_RELIC_ACCOUNT_ID nao configurados - observabilidade como codigo pulada."
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  plan:
+    name: Terraform plan (observabilidade)
+    needs: verifica-credenciais
+    if: needs.verifica-credenciais.outputs.configurado == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: observability
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # State no mesmo bucket S3 dos demais stacks; a leitura do state da Lambda
+      # (URL do gateway) usa a mesma identidade.
+      - name: Configura credenciais AWS (chave estática do terraform-deployer)
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "~> 1.10"
+
+      - name: Terraform fmt (check)
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        run: terraform plan -input=false
+
+  apply:
+    name: Terraform apply (observabilidade)
+    needs: [verifica-credenciais, plan]
+    if: >-
+      needs.verifica-credenciais.outputs.configurado == 'true' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && inputs.action == 'apply'))
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: terraform-apply-observability-prod
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: observability
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Configura credenciais AWS (chave estática do terraform-deployer)
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "~> 1.10"
+          terraform_wrapper: false
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform apply
+        run: terraform apply -input=false -auto-approve
+
+      - name: Painel publicado
+        run: echo "::notice::Painel do New Relic - $(terraform output -raw painel_url)"

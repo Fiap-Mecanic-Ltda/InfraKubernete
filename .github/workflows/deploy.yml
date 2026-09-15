@@ -21,6 +21,12 @@ on:
         type: string
         required: false
         default: ""
+  # Disparado pelo repositório da aplicação logo depois de publicar as imagens
+  # no ECR (push na main de lá), com a tag no payload: fecha o deploy automático
+  # de produção sem ninguém precisar rodar este workflow na mão. O GitHub sempre
+  # executa repository_dispatch a partir da branch padrão (main).
+  repository_dispatch:
+    types: [imagem-publicada]
 
 permissions:
   contents: read
@@ -45,7 +51,7 @@ jobs:
       project_name: ${{ steps.vars.outputs.project_name }}
       environment: ${{ steps.vars.outputs.environment }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Extrai defaults do variables.tf
         id: vars
@@ -68,17 +74,17 @@ jobs:
       PROJECT_NAME: ${{ needs.read-tf-vars.outputs.project_name }}
       ENVIRONMENT: ${{ needs.read-tf-vars.outputs.environment }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Configura credenciais AWS (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login no ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
 
       # Sem input, usa a imagem mais recente publicada pelo repositório da
       # aplicação. A tag imutável (SHA do commit) é preferida a "latest":
@@ -86,8 +92,17 @@ jobs:
       # "latest" não traria a imagem nova para o nó.
       - name: Resolve a tag da imagem
         id: image
+        # A tag chega por variável de ambiente, e não interpolada no script: o
+        # valor vem de input manual ou do payload do repository_dispatch, e
+        # ${{ }} direto no shell permitiria injetar comandos.
+        env:
+          TAG_INFORMADA: ${{ inputs.image_tag || github.event.client_payload.image_tag }}
         run: |
-          TAG="${{ inputs.image_tag }}"
+          TAG="$TAG_INFORMADA"
+          if [ -n "$TAG" ] && ! printf '%s' "$TAG" | grep -Eq '^[A-Za-z0-9._-]{1,128}$'; then
+            echo "::error::Tag de imagem invalida: use apenas letras, digitos, '.', '_' e '-'."
+            exit 1
+          fi
           if [ -z "$TAG" ]; then
             TAG=$(aws ecr describe-images \
               --repository-name "${PROJECT_NAME}-api" \
@@ -115,7 +130,7 @@ jobs:
           echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
 
       - name: Setup kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4.0.1
 
       # Renderiza os manifestos de produção (Namespace, ConfigMap, API, Web,
       # Services NodePort, HPA) já com as imagens do ECR.
@@ -146,13 +161,28 @@ jobs:
           PREFIX="/${PROJECT_NAME}/${ENVIRONMENT}"
           get_param() { aws ssm get-parameter --name "$1" --with-decryption --query 'Parameter.Value' --output text; }
 
+          # New Relic é opcional: sem a license key no SSM, o agente APM fica desligado
+          # (CORECLR_ENABLE_PROFILING=0) e a integração Kubernetes não é instalada.
+          NEW_RELIC_LICENSE_KEY=$(aws ssm get-parameter --name "$PREFIX/newrelic-license-key" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || true)
+          if [ -n "$NEW_RELIC_LICENSE_KEY" ]; then
+            # Vem do SSM, não de um secret do GitHub: sem a máscara, apareceria no log.
+            echo "::add-mask::$NEW_RELIC_LICENSE_KEY"
+            NEW_RELIC_PROFILING=1
+          else
+            NEW_RELIC_PROFILING=0
+          fi
+
           kubectl create secret generic mechanicltda-secrets \
             --namespace mechanicltda \
             --from-literal=ConnectionStrings__DefaultConnection="$(get_param $PREFIX/db-connection-string)" \
             --from-literal=JWT_SECRET_KEY="$(get_param $PREFIX/jwt-secret-key)" \
             --from-literal=ENCRYPTION_KEY="$(get_param $PREFIX/encryption-key)" \
+            --from-literal=CPF_HASH_KEY="$(get_param $PREFIX/cpf-hash-key)" \
             --from-literal=EmailSettings__Password="$(get_param $PREFIX/email-password)" \
             --from-literal=AppSettings__BaseUrlAprovacao="$(get_param $PREFIX/app-base-url-aprovacao)" \
+            --from-literal=AppSettings__UrlSwaggerApi="$(get_param $PREFIX/app-base-url-aprovacao)/swagger" \
+            --from-literal=NEW_RELIC_LICENSE_KEY="$NEW_RELIC_LICENSE_KEY" \
+            --from-literal=NEW_RELIC_PROFILING="$NEW_RELIC_PROFILING" \
             --dry-run=client -o yaml > /tmp/secret-manifest.yaml
 
           # "---" é obrigatório entre documentos concatenados manualmente - sem
@@ -166,6 +196,25 @@ jobs:
             --docker-username=AWS \
             --docker-password="$(aws ecr get-login-password --region "$AWS_REGION")" \
             --dry-run=client -o yaml >> /tmp/secret-manifest.yaml
+
+          # Integração Kubernetes do New Relic (HelmChart do k3s) e o Secret com a
+          # license key que ela lê. Só com a license key configurada.
+          if [ "$NEW_RELIC_PROFILING" = "1" ]; then
+            {
+              echo "---"
+              kubectl create namespace newrelic --dry-run=client -o yaml
+              echo "---"
+              kubectl create secret generic newrelic-license \
+                --namespace newrelic \
+                --from-literal=licenseKey="$NEW_RELIC_LICENSE_KEY" \
+                --dry-run=client -o yaml
+              echo "---"
+              cat k8s/observabilidade/newrelic-bundle.yaml
+            } >> /tmp/secret-manifest.yaml
+            echo "Integracao Kubernetes do New Relic incluida no deploy."
+          else
+            echo "::notice::Sem newrelic-license-key no SSM: agente APM desligado e integracao Kubernetes nao instalada."
+          fi
 
       - name: Envia os manifestos para a instância via SSM e aplica
         run: |

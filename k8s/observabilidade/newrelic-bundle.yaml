@@ -1,0 +1,51 @@
+# Integração Kubernetes do New Relic: CPU, memória, reinícios e réplicas do HPA dos
+# pods (painel "Kubernetes" e alertas de recursos).
+#
+# Instalada pelo helm-controller que já vem no k3s (recurso HelmChart), então o nó não
+# precisa de helm instalado. Fica fora do kustomize de propósito: o deploy.yml só a
+# aplica quando a license key do New Relic existe no SSM, junto com o Secret
+# "newrelic-license" que ela referencia.
+#
+# Os nós são t3.small (2 GB): só os componentes necessários ficam ligados, em
+# lowDataMode (coleta a cada 30 s em vez de 15 s).
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: newrelic-bundle
+  namespace: kube-system
+spec:
+  repo: https://helm-charts.newrelic.com
+  chart: nri-bundle
+  version: 8.0.24
+  targetNamespace: newrelic
+  createNamespace: true
+  valuesContent: |-
+    global:
+      cluster: mechanicltda-prod
+      lowDataMode: true
+      # A license key vem de um Secret criado pela pipeline, nunca deste arquivo.
+      customSecretName: newrelic-license
+      customSecretLicenseKey: licenseKey
+
+    # CPU, memória e status de nós, pods e containers.
+    newrelic-infrastructure:
+      enabled: true
+
+    # Réplicas do HPA, status de deployments e reinícios.
+    kube-state-metrics:
+      enabled: true
+
+    # Desligados: não são usados pelo painel nem pelos alertas, e custariam memória nos
+    # nós. Logs chegam pelo agente APM da aplicação (logs in context).
+    nri-metadata-injection:
+      enabled: false
+    nri-kube-events:
+      enabled: false
+    newrelic-logging:
+      enabled: false
+    nri-prometheus:
+      enabled: false
+    newrelic-prometheus-agent:
+      enabled: false
+    k8s-agents-operator:
+      enabled: false

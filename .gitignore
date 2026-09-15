@@ -22,3 +22,10 @@ kubeconfig.yaml
 *.swp
 .DS_Store
 Thumbs.db
+
+# Terraform - observabilidade (New Relic)
+observability/.terraform/
+observability/*.tfstate
+observability/*.tfstate.*
+observability/*.tfvars
+!observability/terraform.tfvars.example
