@@ -1,0 +1,13 @@
+# Copie para terraform.tfvars com valores reais. Nunca commite o real.
+# Na pipeline, estes valores vem dos secrets/variables do repositorio
+# (ver .github/workflows/observability.yml).
+
+newrelic_account_id = 1234567
+newrelic_api_key    = "NRAK-CHANGE_ME"
+newrelic_region     = "US"
+
+# Opcional: sem ele os alertas existem, mas ninguem e notificado.
+# email_alertas = "time@exemplo.com"
+
+# Opcional: por padrao a URL do gateway vem do state do repositorio Lambda.
+# api_base_url = "https://xxxxxxxx.execute-api.us-east-1.amazonaws.com"

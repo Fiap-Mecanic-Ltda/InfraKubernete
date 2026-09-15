@@ -32,7 +32,7 @@ resource "aws_ssm_parameter" "app_base_url_aprovacao" {
   # Os links de aprovação vão por e-mail para o cliente, então precisam apontar
   # para um endereço que ele consiga abrir. Enquanto o API Gateway não estiver
   # no ar, segue o IP público da EC2; depois, defina app_base_url_aprovacao com
-  # a URL HTTPS do gateway (output api_endpoint do stack da Lambda).
+  # a URL HTTPS do gateway (output api_base_url do stack da Lambda).
   value = var.app_base_url_aprovacao != "" ? var.app_base_url_aprovacao : "http://${aws_eip.app.public_ip}:8080"
 }
 
@@ -44,4 +44,15 @@ resource "aws_ssm_parameter" "cpf_hash_key" {
   name  = "${local.ssm_path_prefix}/cpf-hash-key"
   type  = "SecureString"
   value = var.cpf_hash_key
+}
+
+# License key do New Relic. Só existe quando informada: o deploy.yml liga o agente APM
+# e instala a integração Kubernetes apenas se este parâmetro estiver no SSM.
+# nonsensitive() só no teste de vazio - o valor em si continua sensível.
+resource "aws_ssm_parameter" "newrelic_license_key" {
+  count = nonsensitive(var.newrelic_license_key != "") ? 1 : 0
+
+  name  = "${local.ssm_path_prefix}/newrelic-license-key"
+  type  = "SecureString"
+  value = var.newrelic_license_key
 }

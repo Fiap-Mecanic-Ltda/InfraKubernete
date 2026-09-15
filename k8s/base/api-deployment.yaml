@@ -56,6 +56,23 @@ spec:
                 secretKeyRef:
                   name: mechanicltda-secrets
                   key: CPF_HASH_KEY
+            # New Relic: "1" liga o profiler do agente .NET instalado na imagem. As
+            # duas chaves são opcionais - sem elas (overlay local, ou sem license key),
+            # vale o CORECLR_ENABLE_PROFILING=0 do Dockerfile.
+            - name: CORECLR_ENABLE_PROFILING
+              valueFrom:
+                secretKeyRef:
+                  name: mechanicltda-secrets
+                  key: NEW_RELIC_PROFILING
+                  optional: true
+            - name: NEW_RELIC_LICENSE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mechanicltda-secrets
+                  key: NEW_RELIC_LICENSE_KEY
+                  optional: true
+            - name: NEW_RELIC_APP_NAME
+              value: "mechanicltda-api"
             - name: EmailSettings__Password
               valueFrom:
                 secretKeyRef:

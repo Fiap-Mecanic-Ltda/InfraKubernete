@@ -21,6 +21,12 @@ on:
         type: string
         required: false
         default: ""
+  # Disparado pelo repositório da aplicação logo depois de publicar as imagens
+  # no ECR (push na main de lá), com a tag no payload: fecha o deploy automático
+  # de produção sem ninguém precisar rodar este workflow na mão. O GitHub sempre
+  # executa repository_dispatch a partir da branch padrão (main).
+  repository_dispatch:
+    types: [imagem-publicada]
 
 permissions:
   contents: read
@@ -86,8 +92,17 @@ jobs:
       # "latest" não traria a imagem nova para o nó.
       - name: Resolve a tag da imagem
         id: image
+        # A tag chega por variável de ambiente, e não interpolada no script: o
+        # valor vem de input manual ou do payload do repository_dispatch, e
+        # ${{ }} direto no shell permitiria injetar comandos.
+        env:
+          TAG_INFORMADA: ${{ inputs.image_tag || github.event.client_payload.image_tag }}
         run: |
-          TAG="${{ inputs.image_tag }}"
+          TAG="$TAG_INFORMADA"
+          if [ -n "$TAG" ] && ! printf '%s' "$TAG" | grep -Eq '^[A-Za-z0-9._-]{1,128}$'; then
+            echo "::error::Tag de imagem invalida: use apenas letras, digitos, '.', '_' e '-'."
+            exit 1
+          fi
           if [ -z "$TAG" ]; then
             TAG=$(aws ecr describe-images \
               --repository-name "${PROJECT_NAME}-api" \
@@ -146,6 +161,17 @@ jobs:
           PREFIX="/${PROJECT_NAME}/${ENVIRONMENT}"
           get_param() { aws ssm get-parameter --name "$1" --with-decryption --query 'Parameter.Value' --output text; }
 
+          # New Relic é opcional: sem a license key no SSM, o agente APM fica desligado
+          # (CORECLR_ENABLE_PROFILING=0) e a integração Kubernetes não é instalada.
+          NEW_RELIC_LICENSE_KEY=$(aws ssm get-parameter --name "$PREFIX/newrelic-license-key" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || true)
+          if [ -n "$NEW_RELIC_LICENSE_KEY" ]; then
+            # Vem do SSM, não de um secret do GitHub: sem a máscara, apareceria no log.
+            echo "::add-mask::$NEW_RELIC_LICENSE_KEY"
+            NEW_RELIC_PROFILING=1
+          else
+            NEW_RELIC_PROFILING=0
+          fi
+
           kubectl create secret generic mechanicltda-secrets \
             --namespace mechanicltda \
             --from-literal=ConnectionStrings__DefaultConnection="$(get_param $PREFIX/db-connection-string)" \
@@ -155,6 +181,8 @@ jobs:
             --from-literal=EmailSettings__Password="$(get_param $PREFIX/email-password)" \
             --from-literal=AppSettings__BaseUrlAprovacao="$(get_param $PREFIX/app-base-url-aprovacao)" \
             --from-literal=AppSettings__UrlSwaggerApi="$(get_param $PREFIX/app-base-url-aprovacao)/swagger" \
+            --from-literal=NEW_RELIC_LICENSE_KEY="$NEW_RELIC_LICENSE_KEY" \
+            --from-literal=NEW_RELIC_PROFILING="$NEW_RELIC_PROFILING" \
             --dry-run=client -o yaml > /tmp/secret-manifest.yaml
 
           # "---" é obrigatório entre documentos concatenados manualmente - sem
@@ -168,6 +196,25 @@ jobs:
             --docker-username=AWS \
             --docker-password="$(aws ecr get-login-password --region "$AWS_REGION")" \
             --dry-run=client -o yaml >> /tmp/secret-manifest.yaml
+
+          # Integração Kubernetes do New Relic (HelmChart do k3s) e o Secret com a
+          # license key que ela lê. Só com a license key configurada.
+          if [ "$NEW_RELIC_PROFILING" = "1" ]; then
+            {
+              echo "---"
+              kubectl create namespace newrelic --dry-run=client -o yaml
+              echo "---"
+              kubectl create secret generic newrelic-license \
+                --namespace newrelic \
+                --from-literal=licenseKey="$NEW_RELIC_LICENSE_KEY" \
+                --dry-run=client -o yaml
+              echo "---"
+              cat k8s/observabilidade/newrelic-bundle.yaml
+            } >> /tmp/secret-manifest.yaml
+            echo "Integracao Kubernetes do New Relic incluida no deploy."
+          else
+            echo "::notice::Sem newrelic-license-key no SSM: agente APM desligado e integracao Kubernetes nao instalada."
+          fi
 
       - name: Envia os manifestos para a instância via SSM e aplica
         run: |
