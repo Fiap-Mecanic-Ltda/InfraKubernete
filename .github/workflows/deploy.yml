@@ -239,12 +239,11 @@ jobs:
             --parameters "{\"commands\":[\"export KUBECONFIG=/etc/rancher/k3s/k3s.yaml\",\"aws s3 cp s3://${STATE_BUCKET}/${APP_KEY} - | /usr/local/bin/kubectl apply -f -\",\"aws s3 cp s3://${STATE_BUCKET}/${SECRET_KEY} - | /usr/local/bin/kubectl apply -f -\"]}" \
             --query "Command.CommandId" --output text)
 
-          # Aguarda o comando terminar antes de checar o resultado.
-          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" || true
-
-          aws ssm get-command-invocation \
-            --command-id "$COMMAND_ID" \
-            --instance-id "$INSTANCE_ID" > /tmp/invocation.json
+          # Aguarda o comando terminar antes de checar o resultado. Espera
+          # propria em vez de "aws ssm wait command-executed": o waiter desiste
+          # em 100s e devolve InProgress, falhando o deploy enquanto o kubectl
+          # ainda roda no no.
+          bash "$GITHUB_WORKSPACE/scripts/esperar-ssm.sh" "$COMMAND_ID" "$INSTANCE_ID" 600 > /tmp/invocation.json || true
 
           cat /tmp/invocation.json
 
@@ -267,11 +266,8 @@ jobs:
             --parameters '{"commands":["export KUBECONFIG=/etc/rancher/k3s/k3s.yaml","/usr/local/bin/kubectl rollout status deployment/mechanicltda-api -n mechanicltda --timeout=300s","/usr/local/bin/kubectl rollout status deployment/mechanicltda-web -n mechanicltda --timeout=300s"]}' \
             --query "Command.CommandId" --output text)
 
-          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" || true
-
-          aws ssm get-command-invocation \
-            --command-id "$COMMAND_ID" \
-            --instance-id "$INSTANCE_ID" > /tmp/rollout.json
+          # Limite maior que o das duas chamadas de rollout status (300s cada).
+          bash "$GITHUB_WORKSPACE/scripts/esperar-ssm.sh" "$COMMAND_ID" "$INSTANCE_ID" 660 > /tmp/rollout.json || true
 
           cat /tmp/rollout.json
           STATUS=$(python3 -c "import json;print(json.load(open('/tmp/rollout.json'))['Status'])")
