@@ -60,6 +60,7 @@ jobs:
       TF_VAR_ec2_key_pair_name: mechanicltda-prod
       TF_VAR_jwt_secret_key: ${{ secrets.JWT_SECRET_KEY }}
       TF_VAR_encryption_cpf_cnpj_key: ${{ secrets.ENCRYPTION_KEY }}
+      TF_VAR_cpf_hash_key: ${{ secrets.CPF_HASH_KEY }}
       TF_VAR_email_password: ${{ secrets.EMAIL_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
@@ -100,6 +101,7 @@ jobs:
       TF_VAR_ec2_key_pair_name: mechanicltda-prod
       TF_VAR_jwt_secret_key: ${{ secrets.JWT_SECRET_KEY }}
       TF_VAR_encryption_cpf_cnpj_key: ${{ secrets.ENCRYPTION_KEY }}
+      TF_VAR_cpf_hash_key: ${{ secrets.CPF_HASH_KEY }}
       TF_VAR_email_password: ${{ secrets.EMAIL_PASSWORD }}
     steps:
       - uses: actions/checkout@v4

@@ -151,8 +151,10 @@ jobs:
             --from-literal=ConnectionStrings__DefaultConnection="$(get_param $PREFIX/db-connection-string)" \
             --from-literal=JWT_SECRET_KEY="$(get_param $PREFIX/jwt-secret-key)" \
             --from-literal=ENCRYPTION_KEY="$(get_param $PREFIX/encryption-key)" \
+            --from-literal=CPF_HASH_KEY="$(get_param $PREFIX/cpf-hash-key)" \
             --from-literal=EmailSettings__Password="$(get_param $PREFIX/email-password)" \
             --from-literal=AppSettings__BaseUrlAprovacao="$(get_param $PREFIX/app-base-url-aprovacao)" \
+            --from-literal=AppSettings__UrlSwaggerApi="$(get_param $PREFIX/app-base-url-aprovacao)/swagger" \
             --dry-run=client -o yaml > /tmp/secret-manifest.yaml
 
           # "---" é obrigatório entre documentos concatenados manualmente - sem

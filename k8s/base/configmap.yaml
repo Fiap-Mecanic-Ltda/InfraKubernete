@@ -10,5 +10,7 @@ metadata:
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
   JwtSettings__Issuer: "MechanicLtda.API"
+  # Segundo emissor aceito pela API: a Lambda de autenticacao por CPF.
+  JwtSettings__IssuerCpf: "MechanicLtda.Auth.Cpf"
   JwtSettings__Audience: "MechanicLtda.Clients"
   JwtSettings__ExpiracaoMinutos: "60"
