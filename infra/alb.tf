@@ -35,6 +35,12 @@ resource "aws_security_group" "alb" {
   }
 }
 
+# Sem access_logs de propósito (terraform:S6258, aceito no Sonar). O ALB é
+# interno e só recebe tráfego do VPC Link, e cada requisição já fica registrada
+# no access log do API Gateway (CloudWatch, repositório Lambda) com o requestId
+# que chega à API no header X-Correlation-Id e entra nos logs e traces do New
+# Relic. Os access logs do ALB só podem ir para S3, o que exigiria buckets
+# dedicados para repetir a mesma informação.
 resource "aws_lb" "internal" {
   name               = "${var.project_name}-${var.environment}-int-alb"
   internal           = true

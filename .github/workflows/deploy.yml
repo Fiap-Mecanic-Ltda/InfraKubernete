@@ -51,7 +51,7 @@ jobs:
       project_name: ${{ steps.vars.outputs.project_name }}
       environment: ${{ steps.vars.outputs.environment }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Extrai defaults do variables.tf
         id: vars
@@ -74,17 +74,17 @@ jobs:
       PROJECT_NAME: ${{ needs.read-tf-vars.outputs.project_name }}
       ENVIRONMENT: ${{ needs.read-tf-vars.outputs.environment }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Configura credenciais AWS (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login no ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
 
       # Sem input, usa a imagem mais recente publicada pelo repositório da
       # aplicação. A tag imutável (SHA do commit) é preferida a "latest":
@@ -130,7 +130,7 @@ jobs:
           echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
 
       - name: Setup kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4.0.1
 
       # Renderiza os manifestos de produção (Namespace, ConfigMap, API, Web,
       # Services NodePort, HPA) já com as imagens do ECR.
