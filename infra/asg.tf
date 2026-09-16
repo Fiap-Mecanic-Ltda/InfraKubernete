@@ -23,6 +23,7 @@ resource "aws_launch_template" "worker" {
     region            = var.aws_region
     token_param_name  = "${local.ssm_path_prefix}/k3s-node-token"
     server_private_ip = aws_instance.app.private_ip
+    server_name_tag   = "${var.project_name}-${var.environment}-api"
   }))
 
   tag_specifications {
@@ -55,6 +56,17 @@ resource "aws_autoscaling_group" "worker" {
   launch_template {
     id      = aws_launch_template.worker.id
     version = "$Latest"
+  }
+
+  # Sem isto, um apply que muda o user_data (o IP do server entra nele) cria uma
+  # versao nova do launch template mas nao toca nas instancias existentes: os
+  # workers antigos continuam apontando para um server que nao existe mais.
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 0
+      instance_warmup        = 180
+    }
   }
 
   tag {
