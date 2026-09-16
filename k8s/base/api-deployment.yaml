@@ -86,10 +86,10 @@ spec:
           resources:
             requests:
               cpu: "100m"
-              memory: "192Mi"
+              memory: "256Mi"
             limits:
               cpu: "500m"
-              memory: "384Mi"
+              memory: "512Mi"
           # Cobre o tempo de migration com retry (ate 100s) sem deixar o
           # liveness/readiness matar o container no meio do boot - sem isso,
           # o probe reiniciava o pod antes da migration terminar.

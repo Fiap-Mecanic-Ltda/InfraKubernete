@@ -15,18 +15,17 @@ spec:
   minReplicas: 1
   maxReplicas: 5
   metrics:
+    # Só CPU. Escalar por memória não funciona nesta aplicação: o consumo é
+    # quase todo custo fixo por pod (runtime .NET mais o agente APM). Passando
+    # do alvo, o HPA vai para maxReplicas, e cada réplica nova repete o mesmo
+    # consumo — a utilização não cai e ele fica cravado no máximo, enchendo o
+    # cluster de pods. CPU, essa sim, dilui entre réplicas.
     - type: Resource
       resource:
         name: cpu
         target:
           type: Utilization
           averageUtilization: 70
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 80
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 120
