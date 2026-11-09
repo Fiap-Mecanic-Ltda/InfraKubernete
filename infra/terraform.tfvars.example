@@ -26,4 +26,4 @@ cpf_hash_key = "CHANGE_ME_CPF_HASH_KEY_MIN_32_CHARS"
 
 # Opcional: senha do RabbitMQ compartilhado pelos microsservicos da Fase 4. Sem ela
 # o broker nao e instalado no cluster.
-# rabbitmq_password = "CHANGE_ME_RABBITMQ_PASSWORD"
+# rabbitmq_segredo = "CHANGE_ME"

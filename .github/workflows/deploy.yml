@@ -236,7 +236,7 @@ jobs:
               kubectl create secret generic rabbitmq-credentials \
                 --namespace mensageria \
                 --from-literal=usuario="$RABBITMQ_USER" \
-                --from-literal=senha="$RABBITMQ_SEGREDO" \
+                --from-literal=segredo="$RABBITMQ_SEGREDO" \
                 --dry-run=client -o yaml
             } >> /tmp/secret-manifest.yaml
             echo "RABBITMQ_HABILITADO=true" >> "$GITHUB_ENV"

@@ -227,7 +227,7 @@ variable "microsservicos_node_ports" {
   }
 }
 
-variable "rabbitmq_password" {
+variable "rabbitmq_segredo" {
   type        = string
   description = <<-EOT
     Senha do usuario do RabbitMQ compartilhado pelos microsservicos (Saga). Opcional:

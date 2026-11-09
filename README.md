@@ -178,7 +178,7 @@ com o agente desligado e não instala a integração Kubernetes.
 | `EMAIL_PASSWORD` | Secret | `terraform.yml` | `TF_VAR_email_password` |
 | `AWS_ROLE_ARN` | Secret | `deploy.yml` | Output `github_actions_role_arn` do Terraform |
 | `NEW_RELIC_LICENSE_KEY` | Secret (opcional) | `terraform.yml` | License key (ingest) — vai para o SSM e liga o agente APM e a integração Kubernetes |
-| `RABBITMQ_PASSWORD` | Secret (opcional) | `terraform.yml` | Senha do RabbitMQ dos microsserviços da Fase 4 — vai para o SSM e liga o broker no deploy |
+| `RABBITMQ_SEGREDO` | Secret (opcional) | `terraform.yml` | Senha do RabbitMQ dos microsserviços da Fase 4 — vai para o SSM e liga o broker no deploy |
 | `NEW_RELIC_API_KEY` | Secret (opcional) | `observability.yml` | User API key (`NRAK-...`) para criar alertas, painel e monitor |
 | `NEW_RELIC_ACCOUNT_ID` | Secret (opcional) | `observability.yml` | ID da conta do New Relic |
 | `EMAIL_ALERTAS` | Variable (opcional) | `observability.yml` | E-mail que recebe os incidentes |
@@ -206,7 +206,7 @@ O que este repositório faz por eles:
 - **RabbitMQ** (`k8s/mensageria/`): broker único da Saga, num StatefulSet de uma réplica no
   namespace `mensageria`, fixado no server k3s (o PVC `local-path` fica preso ao nó) e exposto só
   como ClusterIP em `rabbitmq.mensageria.svc.cluster.local:5672`. Só sobe quando o secret
-  `RABBITMQ_PASSWORD` existe: o Terraform grava `/<projeto>/<ambiente>/mensageria/rabbitmq-user` e
+  `RABBITMQ_SEGREDO` existe: o Terraform grava `/<projeto>/<ambiente>/mensageria/rabbitmq-user` e
   `rabbitmq-segredo` no SSM, e o `deploy.yml` monta o Secret `rabbitmq-credentials` a partir
   deles. Os serviços leem as mesmas credenciais no deploy deles.
 

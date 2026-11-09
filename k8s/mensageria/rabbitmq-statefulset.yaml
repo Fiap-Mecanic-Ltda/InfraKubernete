@@ -58,7 +58,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: rabbitmq-credentials
-                  key: senha
+                  key: segredo
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
