@@ -145,6 +145,22 @@ data "aws_iam_policy_document" "worker_ssm_read_token" {
   }
 }
 
+# Descoberta do server k3s pela tag Name no boot (user_data_worker.sh.tpl).
+data "aws_iam_policy_document" "worker_describe_server" {
+  statement {
+    sid       = "DescribeInstances"
+    effect    = "Allow"
+    actions   = ["ec2:DescribeInstances"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "worker_describe_server" {
+  name   = "${var.project_name}-${var.environment}-worker-describe-server"
+  role   = aws_iam_role.worker_instance_role.id
+  policy = data.aws_iam_policy_document.worker_describe_server.json
+}
+
 resource "aws_iam_role_policy" "worker_ssm_read_token" {
   name   = "${var.project_name}-${var.environment}-worker-ssm-read-token"
   role   = aws_iam_role.worker_instance_role.id

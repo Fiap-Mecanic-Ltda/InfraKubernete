@@ -23,3 +23,7 @@ cpf_hash_key = "CHANGE_ME_CPF_HASH_KEY_MIN_32_CHARS"
 # Opcional: license key (ingest) do New Relic. Sem ela a aplicacao sobe com o agente
 # APM desligado e a integracao Kubernetes nao e instalada.
 # newrelic_license_key = "CHANGE_ME_NEW_RELIC_LICENSE_KEY"
+
+# Opcional: senha do RabbitMQ compartilhado pelos microsservicos da Fase 4. Sem ela
+# o broker nao e instalado no cluster.
+# rabbitmq_segredo = "CHANGE_ME"

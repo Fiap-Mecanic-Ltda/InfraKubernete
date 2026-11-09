@@ -23,6 +23,7 @@ resource "aws_launch_template" "worker" {
     region            = var.aws_region
     token_param_name  = "${local.ssm_path_prefix}/k3s-node-token"
     server_private_ip = aws_instance.app.private_ip
+    server_name_tag   = "${var.project_name}-${var.environment}-api"
   }))
 
   tag_specifications {
@@ -52,9 +53,27 @@ resource "aws_autoscaling_group" "worker" {
   # qualquer nó atende a API, independente de onde o pod está.
   target_group_arns = [aws_lb_target_group.api.arn]
 
+  # Os microsservicos da Fase 4 registram o ASG nos proprios target groups
+  # (aws_autoscaling_attachment, no repositorio de infra de cada servico). Sem
+  # o ignore, todo apply deste stack tiraria o ASG daqueles target groups.
+  lifecycle {
+    ignore_changes = [target_group_arns]
+  }
+
   launch_template {
     id      = aws_launch_template.worker.id
     version = "$Latest"
+  }
+
+  # Sem isto, um apply que muda o user_data (o IP do server entra nele) cria uma
+  # versao nova do launch template mas nao toca nas instancias existentes: os
+  # workers antigos continuam apontando para um server que nao existe mais.
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 0
+      instance_warmup        = 180
+    }
   }
 
   tag {

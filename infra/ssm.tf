@@ -56,3 +56,22 @@ resource "aws_ssm_parameter" "newrelic_license_key" {
   type  = "SecureString"
   value = var.newrelic_license_key
 }
+
+# Credenciais do RabbitMQ compartilhado pelos microsservicos da Fase 4 (Saga da
+# OS, Billing e Execucao). Ficam num prefixo proprio: o deploy deste repositorio
+# monta o Secret do broker, e o de cada servico monta o Secret do cliente.
+resource "aws_ssm_parameter" "rabbitmq_user" {
+  count = nonsensitive(var.rabbitmq_segredo != "") ? 1 : 0
+
+  name  = "${local.ssm_path_prefix}/mensageria/rabbitmq-user"
+  type  = "String"
+  value = var.rabbitmq_user
+}
+
+resource "aws_ssm_parameter" "rabbitmq_segredo" {
+  count = nonsensitive(var.rabbitmq_segredo != "") ? 1 : 0
+
+  name  = "${local.ssm_path_prefix}/mensageria/rabbitmq-segredo"
+  type  = "SecureString"
+  value = var.rabbitmq_segredo
+}

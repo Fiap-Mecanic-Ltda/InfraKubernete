@@ -71,6 +71,7 @@ jobs:
       TF_VAR_cpf_hash_key: ${{ secrets.CPF_HASH_KEY }}
       TF_VAR_newrelic_license_key: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
       TF_VAR_email_password: ${{ secrets.EMAIL_PASSWORD }}
+      TF_VAR_rabbitmq_segredo: ${{ secrets.RABBITMQ_SEGREDO }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -81,6 +82,20 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ needs.read-tf-vars.outputs.aws_region }}
 
+      # Sem o bucket do state (ambiente AWS derrubado ou conta trocada), o init
+      # falharia em todo PR. Nesse caso o job so confere fmt e validate (sem
+      # backend) e avisa; o plan volta sozinho quando o bucket existir.
+      - name: Confere o bucket do state
+        id: bucket
+        run: |
+          BUCKET=$(grep -E '^[[:space:]]*bucket[[:space:]]*=' versions.tf | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')
+          if aws s3api head-bucket --bucket "$BUCKET" >/dev/null 2>&1; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Bucket do state '$BUCKET' nao encontrado: rodando so fmt e validate, sem plan."
+          fi
+
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: "~> 1.10"
@@ -89,12 +104,18 @@ jobs:
         run: terraform fmt -check -recursive
 
       - name: Terraform init
+        if: steps.bucket.outputs.ok == 'true'
         run: terraform init -input=false
+
+      - name: Terraform init (sem backend)
+        if: steps.bucket.outputs.ok != 'true'
+        run: terraform init -input=false -backend=false
 
       - name: Terraform validate
         run: terraform validate
 
       - name: Terraform plan
+        if: steps.bucket.outputs.ok == 'true'
         run: terraform plan -input=false
 
   apply:
@@ -122,6 +143,7 @@ jobs:
       TF_VAR_cpf_hash_key: ${{ secrets.CPF_HASH_KEY }}
       TF_VAR_newrelic_license_key: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
       TF_VAR_email_password: ${{ secrets.EMAIL_PASSWORD }}
+      TF_VAR_rabbitmq_segredo: ${{ secrets.RABBITMQ_SEGREDO }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
