@@ -30,6 +30,15 @@ spec:
       automountServiceAccountToken: false
       nodeSelector:
         node-role.kubernetes.io/control-plane: "true"
+      # A imagem oficial roda como o usuario rabbitmq (999) quando nao inicia
+      # como root; o fsGroup deixa o PVC gravavel por ele.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: rabbitmq
           image: rabbitmq:3.13-management
@@ -50,13 +59,19 @@ spec:
                 secretKeyRef:
                   name: rabbitmq-credentials
                   key: senha
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           resources:
             requests:
               cpu: "100m"
               memory: "256Mi"
+              ephemeral-storage: "256Mi"
             limits:
               cpu: "500m"
               memory: "512Mi"
+              ephemeral-storage: "1Gi"
           startupProbe:
             exec:
               command: ["rabbitmq-diagnostics", "-q", "ping"]
