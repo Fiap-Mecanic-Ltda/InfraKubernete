@@ -207,7 +207,7 @@ O que este repositório faz por eles:
   namespace `mensageria`, fixado no server k3s (o PVC `local-path` fica preso ao nó) e exposto só
   como ClusterIP em `rabbitmq.mensageria.svc.cluster.local:5672`. Só sobe quando o secret
   `RABBITMQ_PASSWORD` existe: o Terraform grava `/<projeto>/<ambiente>/mensageria/rabbitmq-user` e
-  `rabbitmq-password` no SSM, e o `deploy.yml` monta o Secret `rabbitmq-credentials` a partir
+  `rabbitmq-segredo` no SSM, e o `deploy.yml` monta o Secret `rabbitmq-credentials` a partir
   deles. Os serviços leem as mesmas credenciais no deploy deles.
 
 ## Primeira subida (ordem entre os repositórios)

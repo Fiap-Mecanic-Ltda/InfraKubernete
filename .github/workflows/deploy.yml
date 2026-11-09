@@ -216,13 +216,17 @@ jobs:
             echo "::notice::Sem newrelic-license-key no SSM: agente APM desligado e integracao Kubernetes nao instalada."
           fi
 
+      # Passo separado do Secret da aplicacao: so mexe nos manifestos do broker.
+      - name: Inclui o RabbitMQ dos microsservicos (namespace mensageria)
+        run: |
+          PREFIX="/${PROJECT_NAME}/${ENVIRONMENT}"
           # RabbitMQ compartilhado pelos microsservicos da Fase 4 (namespace
           # mensageria). Opcional como o New Relic: sem as credenciais no SSM
-          # (variavel rabbitmq_password vazia no Terraform), o broker nao sobe.
+          # (credencial do broker vazia no Terraform), o broker nao sobe.
           RABBITMQ_USER=$(aws ssm get-parameter --name "$PREFIX/mensageria/rabbitmq-user" --query 'Parameter.Value' --output text 2>/dev/null || true)
-          RABBITMQ_PASSWORD=$(aws ssm get-parameter --name "$PREFIX/mensageria/rabbitmq-password" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || true)
-          if [ -n "$RABBITMQ_USER" ] && [ -n "$RABBITMQ_PASSWORD" ]; then
-            echo "::add-mask::$RABBITMQ_PASSWORD"
+          RABBITMQ_SEGREDO=$(aws ssm get-parameter --name "$PREFIX/mensageria/rabbitmq-segredo" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || true)
+          if [ -n "$RABBITMQ_USER" ] && [ -n "$RABBITMQ_SEGREDO" ]; then
+            echo "::add-mask::$RABBITMQ_SEGREDO"
             {
               echo "---"
               kubectl kustomize k8s/mensageria
@@ -232,7 +236,7 @@ jobs:
               kubectl create secret generic rabbitmq-credentials \
                 --namespace mensageria \
                 --from-literal=usuario="$RABBITMQ_USER" \
-                --from-literal=senha="$RABBITMQ_PASSWORD" \
+                --from-literal=senha="$RABBITMQ_SEGREDO" \
                 --dry-run=client -o yaml
             } >> /tmp/secret-manifest.yaml
             echo "RABBITMQ_HABILITADO=true" >> "$GITHUB_ENV"

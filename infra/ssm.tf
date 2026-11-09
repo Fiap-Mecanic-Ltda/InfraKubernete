@@ -71,7 +71,7 @@ resource "aws_ssm_parameter" "rabbitmq_user" {
 resource "aws_ssm_parameter" "rabbitmq_password" {
   count = nonsensitive(var.rabbitmq_password != "") ? 1 : 0
 
-  name  = "${local.ssm_path_prefix}/mensageria/rabbitmq-password"
+  name  = "${local.ssm_path_prefix}/mensageria/rabbitmq-segredo"
   type  = "SecureString"
   value = var.rabbitmq_password
 }
