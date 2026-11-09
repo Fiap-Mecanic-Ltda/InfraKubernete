@@ -71,6 +71,7 @@ jobs:
       TF_VAR_cpf_hash_key: ${{ secrets.CPF_HASH_KEY }}
       TF_VAR_newrelic_license_key: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
       TF_VAR_email_password: ${{ secrets.EMAIL_PASSWORD }}
+      TF_VAR_rabbitmq_password: ${{ secrets.RABBITMQ_PASSWORD }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -122,6 +123,7 @@ jobs:
       TF_VAR_cpf_hash_key: ${{ secrets.CPF_HASH_KEY }}
       TF_VAR_newrelic_license_key: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
       TF_VAR_email_password: ${{ secrets.EMAIL_PASSWORD }}
+      TF_VAR_rabbitmq_password: ${{ secrets.RABBITMQ_PASSWORD }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 

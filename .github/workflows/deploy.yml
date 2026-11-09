@@ -216,6 +216,31 @@ jobs:
             echo "::notice::Sem newrelic-license-key no SSM: agente APM desligado e integracao Kubernetes nao instalada."
           fi
 
+          # RabbitMQ compartilhado pelos microsservicos da Fase 4 (namespace
+          # mensageria). Opcional como o New Relic: sem as credenciais no SSM
+          # (variavel rabbitmq_password vazia no Terraform), o broker nao sobe.
+          RABBITMQ_USER=$(aws ssm get-parameter --name "$PREFIX/mensageria/rabbitmq-user" --query 'Parameter.Value' --output text 2>/dev/null || true)
+          RABBITMQ_PASSWORD=$(aws ssm get-parameter --name "$PREFIX/mensageria/rabbitmq-password" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || true)
+          if [ -n "$RABBITMQ_USER" ] && [ -n "$RABBITMQ_PASSWORD" ]; then
+            echo "::add-mask::$RABBITMQ_PASSWORD"
+            {
+              echo "---"
+              kubectl kustomize k8s/mensageria
+            } >> /tmp/app-manifests.yaml
+            {
+              echo "---"
+              kubectl create secret generic rabbitmq-credentials \
+                --namespace mensageria \
+                --from-literal=usuario="$RABBITMQ_USER" \
+                --from-literal=senha="$RABBITMQ_PASSWORD" \
+                --dry-run=client -o yaml
+            } >> /tmp/secret-manifest.yaml
+            echo "RABBITMQ_HABILITADO=true" >> "$GITHUB_ENV"
+            echo "RabbitMQ (namespace mensageria) incluido no deploy."
+          else
+            echo "::notice::Sem credenciais do RabbitMQ no SSM: broker dos microsservicos nao instalado."
+          fi
+
       - name: Envia os manifestos para a instância via SSM e aplica
         run: |
           # Os manifestos vão pro S3 em vez de embutidos inline no comando do
@@ -260,14 +285,20 @@ jobs:
       # readinessProbe).
       - name: Aguarda o rollout via SSM
         run: |
+          COMANDOS='"export KUBECONFIG=/etc/rancher/k3s/k3s.yaml","/usr/local/bin/kubectl rollout status deployment/mechanicltda-api -n mechanicltda --timeout=300s","/usr/local/bin/kubectl rollout status deployment/mechanicltda-web -n mechanicltda --timeout=300s"'
+          if [ "${RABBITMQ_HABILITADO:-}" = "true" ]; then
+            COMANDOS="$COMANDOS"',"/usr/local/bin/kubectl rollout status statefulset/rabbitmq -n mensageria --timeout=300s"'
+          fi
+          PARAMETROS="{\"commands\":[$COMANDOS]}"
+
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --parameters '{"commands":["export KUBECONFIG=/etc/rancher/k3s/k3s.yaml","/usr/local/bin/kubectl rollout status deployment/mechanicltda-api -n mechanicltda --timeout=300s","/usr/local/bin/kubectl rollout status deployment/mechanicltda-web -n mechanicltda --timeout=300s"]}' \
+            --parameters "$PARAMETROS" \
             --query "Command.CommandId" --output text)
 
-          # Limite maior que o das duas chamadas de rollout status (300s cada).
-          bash "$GITHUB_WORKSPACE/scripts/esperar-ssm.sh" "$COMMAND_ID" "$INSTANCE_ID" 660 > /tmp/rollout.json || true
+          # Limite maior que a soma das chamadas de rollout status (300s cada).
+          bash "$GITHUB_WORKSPACE/scripts/esperar-ssm.sh" "$COMMAND_ID" "$INSTANCE_ID" 960 > /tmp/rollout.json || true
 
           cat /tmp/rollout.json
           STATUS=$(python3 -c "import json;print(json.load(open('/tmp/rollout.json'))['Status'])")

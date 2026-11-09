@@ -212,3 +212,32 @@ variable "newrelic_license_key" {
   sensitive   = true
   default     = ""
 }
+
+# Microsservicos da Fase 4
+
+variable "microsservicos_node_ports" {
+  type        = map(number)
+  description = <<-EOT
+    NodePort de cada microsservico que o ALB interno alcanca nos nos k3s. A
+    porta precisa estar entre 8000 e 9000 (--service-node-port-range do k3s) e
+    dentro do egress do SG do ALB (8080-8090).
+  EOT
+  default = {
+    "os-service" = 8081
+  }
+}
+
+variable "rabbitmq_password" {
+  type        = string
+  description = <<-EOT
+    Senha do usuario do RabbitMQ compartilhado pelos microsservicos (Saga). Opcional:
+    vazia, os parametros no SSM nao sao criados e o deploy nao sobe o broker.
+  EOT
+  sensitive   = true
+  default     = ""
+}
+
+variable "rabbitmq_user" {
+  type    = string
+  default = "mechanicltda"
+}

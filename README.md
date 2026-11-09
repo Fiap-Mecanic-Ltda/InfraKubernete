@@ -178,6 +178,7 @@ com o agente desligado e não instala a integração Kubernetes.
 | `EMAIL_PASSWORD` | Secret | `terraform.yml` | `TF_VAR_email_password` |
 | `AWS_ROLE_ARN` | Secret | `deploy.yml` | Output `github_actions_role_arn` do Terraform |
 | `NEW_RELIC_LICENSE_KEY` | Secret (opcional) | `terraform.yml` | License key (ingest) — vai para o SSM e liga o agente APM e a integração Kubernetes |
+| `RABBITMQ_PASSWORD` | Secret (opcional) | `terraform.yml` | Senha do RabbitMQ dos microsserviços da Fase 4 — vai para o SSM e liga o broker no deploy |
 | `NEW_RELIC_API_KEY` | Secret (opcional) | `observability.yml` | User API key (`NRAK-...`) para criar alertas, painel e monitor |
 | `NEW_RELIC_ACCOUNT_ID` | Secret (opcional) | `observability.yml` | ID da conta do New Relic |
 | `EMAIL_ALERTAS` | Variable (opcional) | `observability.yml` | E-mail que recebe os incidentes |
@@ -186,6 +187,28 @@ O Environment `production` (Settings → Environments) precisa existir para o jo
 
 `aws_region`, `project_name` e `environment` **não** são variáveis do GitHub: os workflows leem os
 defaults direto de `infra/variables.tf` (fonte única de verdade).
+
+## Microsserviços da Fase 4
+
+O cluster, a VPC e o ALB interno continuam aqui e são compartilhados. Cada microsserviço tem os
+próprios repositórios de infra (ex.: [OrdemServico-InfraKubernete](https://github.com/Fiap-Mecanic-Ltda/OrdemServico-InfraKubernete)),
+que leem este state por `terraform_remote_state` e criam o resto: ECR, role de OIDC, target group,
+regra no listener do ALB e os manifestos no próprio namespace.
+
+O que este repositório faz por eles:
+
+- **Porta no SG dos nós**: `microsservicos_node_ports` (padrão `os-service = 8081`) libera o
+  NodePort de cada serviço só a partir do ALB interno.
+- **ASG nos target groups dos serviços**: o ASG tem `ignore_changes = [target_group_arns]`, porque
+  cada serviço registra os workers no próprio target group com `aws_autoscaling_attachment`.
+- **Outputs**: `worker_asg_name`, `github_oidc_provider_arn`, `rabbitmq_host`, além dos que já
+  existiam (`alb_listener_arn`, `ec2_instance_id`, `alb_security_group_id`).
+- **RabbitMQ** (`k8s/mensageria/`): broker único da Saga, num StatefulSet de uma réplica no
+  namespace `mensageria`, fixado no server k3s (o PVC `local-path` fica preso ao nó) e exposto só
+  como ClusterIP em `rabbitmq.mensageria.svc.cluster.local:5672`. Só sobe quando o secret
+  `RABBITMQ_PASSWORD` existe: o Terraform grava `/<projeto>/<ambiente>/mensageria/rabbitmq-user` e
+  `rabbitmq-password` no SSM, e o `deploy.yml` monta o Secret `rabbitmq-credentials` a partir
+  deles. Os serviços leem as mesmas credenciais no deploy deles.
 
 ## Primeira subida (ordem entre os repositórios)
 

@@ -28,6 +28,21 @@ resource "aws_security_group" "ec2" {
     security_groups = [aws_security_group.alb.id]
   }
 
+  # NodePorts dos microsservicos da Fase 4 (8081 = OS Service), alcancados so
+  # pelo ALB interno. Os target groups e as regras do listener ficam no
+  # repositorio de infra de cada servico; aqui so a porta e liberada.
+  dynamic "ingress" {
+    for_each = var.microsservicos_node_ports
+
+    content {
+      description     = "NodePort ${ingress.value} (${ingress.key}) a partir do ALB interno"
+      from_port       = ingress.value
+      to_port         = ingress.value
+      protocol        = "tcp"
+      security_groups = [aws_security_group.alb.id]
+    }
+  }
+
   # TEMPORÁRIO: SSH liberado só para investigar por que o amazon-ssm-agent
   # não está registrando (user_data falhou baixando o k3s por erro de TLS).
   # Remover depois de diagnosticar.
@@ -103,6 +118,21 @@ resource "aws_security_group" "worker" {
     to_port         = 8080
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
+  }
+
+  # NodePorts dos microsservicos da Fase 4 (8081 = OS Service), alcancados so
+  # pelo ALB interno. Os target groups e as regras do listener ficam no
+  # repositorio de infra de cada servico; aqui so a porta e liberada.
+  dynamic "ingress" {
+    for_each = var.microsservicos_node_ports
+
+    content {
+      description     = "NodePort ${ingress.value} (${ingress.key}) a partir do ALB interno"
+      from_port       = ingress.value
+      to_port         = ingress.value
+      protocol        = "tcp"
+      security_groups = [aws_security_group.alb.id]
+    }
   }
 
   egress {

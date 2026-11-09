@@ -53,6 +53,13 @@ resource "aws_autoscaling_group" "worker" {
   # qualquer nó atende a API, independente de onde o pod está.
   target_group_arns = [aws_lb_target_group.api.arn]
 
+  # Os microsservicos da Fase 4 registram o ASG nos proprios target groups
+  # (aws_autoscaling_attachment, no repositorio de infra de cada servico). Sem
+  # o ignore, todo apply deste stack tiraria o ASG daqueles target groups.
+  lifecycle {
+    ignore_changes = [target_group_arns]
+  }
+
   launch_template {
     id      = aws_launch_template.worker.id
     version = "$Latest"
