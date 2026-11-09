@@ -25,6 +25,9 @@ spec:
       labels:
         app.kubernetes.io/name: rabbitmq
     spec:
+      # O broker nao fala com a API do Kubernetes: sem token da service account
+      # montado no pod.
+      automountServiceAccountToken: false
       nodeSelector:
         node-role.kubernetes.io/control-plane: "true"
       containers:
