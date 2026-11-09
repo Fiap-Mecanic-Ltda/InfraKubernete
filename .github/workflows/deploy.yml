@@ -151,6 +151,36 @@ jobs:
           EOF
           kubectl kustomize /tmp/prod-render/overlays/prod > /tmp/app-manifests.yaml
 
+      # RabbitMQ em passo proprio, antes do Secret da aplicacao: o Secret do
+      # broker vai para um arquivo separado, juntado aos demais no envio.
+      - name: Inclui o RabbitMQ dos microsservicos (namespace mensageria)
+        run: |
+          PREFIX="/${PROJECT_NAME}/${ENVIRONMENT}"
+          # RabbitMQ compartilhado pelos microsservicos da Fase 4 (namespace
+          # mensageria). Opcional como o New Relic: sem as credenciais no SSM
+          # (credencial do broker vazia no Terraform), o broker nao sobe.
+          RABBITMQ_USER=$(aws ssm get-parameter --name "$PREFIX/mensageria/rabbitmq-user" --query 'Parameter.Value' --output text 2>/dev/null || true)
+          RABBITMQ_SEGREDO=$(aws ssm get-parameter --name "$PREFIX/mensageria/rabbitmq-segredo" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || true)
+          if [ -n "$RABBITMQ_USER" ] && [ -n "$RABBITMQ_SEGREDO" ]; then
+            echo "::add-mask::$RABBITMQ_SEGREDO"
+            {
+              echo "---"
+              kubectl kustomize k8s/mensageria
+            } >> /tmp/app-manifests.yaml
+            {
+              echo "---"
+              kubectl create secret generic rabbitmq-credentials \
+                --namespace mensageria \
+                --from-literal=usuario="$RABBITMQ_USER" \
+                --from-literal=segredo="$RABBITMQ_SEGREDO" \
+                --dry-run=client -o yaml
+            } > /tmp/rabbitmq-secret.yaml
+            echo "RABBITMQ_HABILITADO=true" >> "$GITHUB_ENV"
+            echo "RabbitMQ (namespace mensageria) incluido no deploy."
+          else
+            echo "::notice::Sem credenciais do RabbitMQ no SSM: broker dos microsservicos nao instalado."
+          fi
+
       # Segredos reais nunca ficam no YAML versionado — vêm do SSM Parameter
       # Store (alimentado pelo Terraform a partir do terraform.tfvars) e o
       # Secret é montado em runtime.
@@ -216,37 +246,11 @@ jobs:
             echo "::notice::Sem newrelic-license-key no SSM: agente APM desligado e integracao Kubernetes nao instalada."
           fi
 
-      # Passo separado do Secret da aplicacao: so mexe nos manifestos do broker.
-      - name: Inclui o RabbitMQ dos microsservicos (namespace mensageria)
-        run: |
-          PREFIX="/${PROJECT_NAME}/${ENVIRONMENT}"
-          # RabbitMQ compartilhado pelos microsservicos da Fase 4 (namespace
-          # mensageria). Opcional como o New Relic: sem as credenciais no SSM
-          # (credencial do broker vazia no Terraform), o broker nao sobe.
-          RABBITMQ_USER=$(aws ssm get-parameter --name "$PREFIX/mensageria/rabbitmq-user" --query 'Parameter.Value' --output text 2>/dev/null || true)
-          RABBITMQ_SEGREDO=$(aws ssm get-parameter --name "$PREFIX/mensageria/rabbitmq-segredo" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null || true)
-          if [ -n "$RABBITMQ_USER" ] && [ -n "$RABBITMQ_SEGREDO" ]; then
-            echo "::add-mask::$RABBITMQ_SEGREDO"
-            {
-              echo "---"
-              kubectl kustomize k8s/mensageria
-            } >> /tmp/app-manifests.yaml
-            {
-              echo "---"
-              kubectl create secret generic rabbitmq-credentials \
-                --namespace mensageria \
-                --from-literal=usuario="$RABBITMQ_USER" \
-                --from-literal=segredo="$RABBITMQ_SEGREDO" \
-                --dry-run=client -o yaml
-            } >> /tmp/secret-manifest.yaml
-            echo "RABBITMQ_HABILITADO=true" >> "$GITHUB_ENV"
-            echo "RabbitMQ (namespace mensageria) incluido no deploy."
-          else
-            echo "::notice::Sem credenciais do RabbitMQ no SSM: broker dos microsservicos nao instalado."
-          fi
-
       - name: Envia os manifestos para a instância via SSM e aplica
         run: |
+          # Secret do RabbitMQ (passo anterior), quando o broker esta habilitado.
+          if [ -f /tmp/rabbitmq-secret.yaml ]; then cat /tmp/rabbitmq-secret.yaml >> /tmp/secret-manifest.yaml; fi
+
           # Os manifestos vão pro S3 em vez de embutidos inline no comando do
           # SSM: o payload em base64 (~11KB) estourava os limites práticos do
           # SSM Run Command - o comando era aceito (ganhava CommandId) mas
