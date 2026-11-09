@@ -223,7 +223,8 @@ variable "microsservicos_node_ports" {
     dentro do egress do SG do ALB (8080-8090).
   EOT
   default = {
-    "os-service" = 8081
+    "os-service"       = 8081
+    "execucao-service" = 8082
   }
 }
 
