@@ -28,7 +28,7 @@ resource "aws_security_group" "ec2" {
     security_groups = [aws_security_group.alb.id]
   }
 
-  # NodePorts dos microsservicos da Fase 4 (8081 = OS Service), alcancados so
+  # NodePorts dos microsservicos da Fase 4 (8081 = OS Service, 8082 = Execucao), alcancados so
   # pelo ALB interno. Os target groups e as regras do listener ficam no
   # repositorio de infra de cada servico; aqui so a porta e liberada.
   dynamic "ingress" {
@@ -120,7 +120,7 @@ resource "aws_security_group" "worker" {
     security_groups = [aws_security_group.alb.id]
   }
 
-  # NodePorts dos microsservicos da Fase 4 (8081 = OS Service), alcancados so
+  # NodePorts dos microsservicos da Fase 4 (8081 = OS Service, 8082 = Execucao), alcancados so
   # pelo ALB interno. Os target groups e as regras do listener ficam no
   # repositorio de infra de cada servico; aqui so a porta e liberada.
   dynamic "ingress" {
