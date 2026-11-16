@@ -35,6 +35,12 @@ variable "github_repositories" {
   }
 }
 
+variable "github_oidc_include_name_subjects" {
+  type        = bool
+  description = "Também libera o sub claim só com nomes (owner/repo). Desligado: só a forma imutável com IDs, para caber no limite de 2048 caracteres do trust policy."
+  default     = false
+}
+
 # ID numérico da organização, que compõe o mesmo sub claim imutável.
 # https://api.github.com/orgs/Fiap-Mecanic-Ltda (campo "id").
 variable "github_owner_id" {
