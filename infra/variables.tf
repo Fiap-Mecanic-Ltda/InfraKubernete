@@ -17,9 +17,9 @@ variable "environment" {
 # aplicação (build/push das imagens no ECR) e este, de infra (deploy dos
 # manifestos no k3s via SSM). Os dois precisam constar no trust policy do OIDC.
 #
-# O ID numérico de cada repositório entra junto porque a organização usa
-# immutable subject claims: o sub do token OIDC chega como
-# "repo:OWNER@<owner_id>/REPO@<repo_id>:ref:..." em vez de apenas os nomes.
+# O ID numérico de cada repositório só é usado se a organização ligar o
+# immutable subject claims (github_oidc_include_id_subjects): aí o sub do token
+# OIDC chega como "repo:OWNER@<owner_id>/REPO@<repo_id>:ref:...".
 # Consulte o ID em https://api.github.com/repos/<owner>/<repo> (campo "id").
 variable "github_repositories" {
   type        = map(number)
@@ -37,7 +37,13 @@ variable "github_repositories" {
 
 variable "github_oidc_include_name_subjects" {
   type        = bool
-  description = "Também libera o sub claim só com nomes (owner/repo). Desligado: só a forma imutável com IDs, para caber no limite de 2048 caracteres do trust policy."
+  description = "Libera o sub claim só com nomes (owner/repo), o formato que a organização usa hoje."
+  default     = true
+}
+
+variable "github_oidc_include_id_subjects" {
+  type        = bool
+  description = "Libera o sub claim imutável (owner@id/repo@id). Ligue só se a organização ativar o immutable subject claims; as duas formas juntas estouram o limite de 2048 caracteres do trust policy."
   default     = false
 }
 
