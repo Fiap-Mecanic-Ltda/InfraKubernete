@@ -72,3 +72,12 @@ variable "uso_recurso_limite_percentual" {
   description = "Uso de CPU ou memoria do container, em % do limit, acima do qual o alerta dispara."
   default     = 90
 }
+
+variable "adotar_monitor_existente" {
+  description = <<-EOT
+    Importa para o state o monitor de /health que já existe na conta (mesmo nome).
+    Use false em uma conta do New Relic que ainda não tem o monitor.
+  EOT
+  type        = bool
+  default     = true
+}
