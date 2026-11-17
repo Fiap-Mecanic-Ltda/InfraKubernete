@@ -185,6 +185,18 @@ com o agente desligado e não instala a integração Kubernetes.
 
 O Environment `production` (Settings → Environments) precisa existir para o job de `apply`.
 
+Fora dos secrets do GitHub, um parâmetro opcional é criado à mão no SSM:
+
+| Parâmetro | Uso |
+|---|---|
+| `/mechanicltda/prod/mercadopago-public-key` (String) | Public key **de teste** do Mercado Pago (`TEST-...`). O `deploy.yml` a coloca no Secret do Web, que tokeniza o cartão no navegador na tela de pagamento. Sem ela, a tela fica no modo simulado, que só funciona com o gateway fake do Orçamento. |
+
+```bash
+aws ssm put-parameter --name /mechanicltda/prod/mercadopago-public-key --type String --value "TEST-..." --overwrite
+```
+
+Depois de criar ou trocar o valor, rode o `deploy.yml` de novo para o Web pegar a chave.
+
 `aws_region`, `project_name` e `environment` **não** são variáveis do GitHub: os workflows leem os
 defaults direto de `infra/variables.tf` (fonte única de verdade).
 

@@ -89,6 +89,14 @@ spec:
             # os botões manuais da Execução.
             - name: Integracoes__SagaHabilitada
               value: "true"
+            # Public key de teste do Mercado Pago para a tela de pagamento. Vazia ou ausente,
+            # a tela entra no modo simulado (tokens APRO/FUND que só o gateway fake entende).
+            - name: Integracoes__OrcamentoService__MercadoPagoPublicKey
+              valueFrom:
+                secretKeyRef:
+                  name: mechanicltda-secrets
+                  key: MercadoPago__PublicKey
+                  optional: true
             - name: EmailSettings__Password
               valueFrom:
                 secretKeyRef:
