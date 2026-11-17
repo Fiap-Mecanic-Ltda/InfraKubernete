@@ -233,11 +233,14 @@ repositório novo (a Lambda, por exemplo) ou uma branch que dispara pipeline, at
 variáveis e rode `terraform apply` — sem isso o job correspondente falha no
 `configure-aws-credentials` com erro de `sts:AssumeRoleWithWebIdentity`.
 
-O ID numérico é obrigatório porque a organização usa **immutable subject claims**: o `sub` do token
-OIDC chega como `repo:OWNER@<owner_id>/REPO@<repo_id>:ref:refs/heads/<branch>`, e não com os nomes
-puros. Consulte o ID em `https://api.github.com/repos/<owner>/<repo>` (campo `id`) e o da
-organização em `https://api.github.com/orgs/<owner>` (`github_owner_id`). O trust policy publica as
-duas formas de `sub`, então a role continua assumível caso a organização desligue a opção.
+O formato do `sub` do token OIDC varia por repositório. Os repositórios criados depois que a
+organização ligou o **immutable subject claims** mandam
+`repo:OWNER@<owner_id>/REPO@<repo_id>:ref:refs/heads/<branch>`. Os mais antigos, como o
+MechanicLtda, mandam só os nomes: `repo:OWNER/REPO:ref:refs/heads/<branch>`. Todo repositório entra
+no trust policy na forma com IDs, e os listados em `github_repositories_sub_por_nome` também na
+forma com nomes. Publicar as duas formas para todos estoura o limite de 2048 caracteres do trust
+policy. O ID numérico fica em `https://api.github.com/repos/<owner>/<repo>` (campo `id`), e o da
+organização em `https://api.github.com/orgs/<owner>` (`github_owner_id`).
 
 Para descobrir o `sub` exato que a AWS recebeu numa falha, consulte o CloudTrail:
 
