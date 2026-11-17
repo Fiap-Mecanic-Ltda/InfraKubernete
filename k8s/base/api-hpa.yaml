@@ -1,4 +1,4 @@
-# Requer o metrics-server instalado no cluster para expor métricas de CPU/memória.
+# Requer o metrics-server instalado no cluster para expor métricas de CPU.
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -21,12 +21,8 @@ spec:
         target:
           type: Utilization
           averageUtilization: 70
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 80
+    # Sem métrica de memória: o consumo do .NET em repouso já fica perto de 80%
+    # do request e não cai quando há mais pods, então o HPA nunca voltava a 1.
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 120
