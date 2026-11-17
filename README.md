@@ -93,11 +93,11 @@ que depende dos outputs daqui.
 
 ## Pipelines
 
-Não há ambiente de homologação na AWS (decisão do time): `homolog` roda só `plan`; a `main`
+Não há ambiente de homologação na AWS (decisão do time): `homologacao` roda só `plan`; a `main`
 aplica automaticamente. Todo apply usa o Environment `production` — com revisores obrigatórios
 configurados, ele espera a aprovação depois do `plan` do mesmo run.
 
-| Workflow | PR e push em `homolog` | Push em `main` |
+| Workflow | PR e push em `homologacao` | Push em `main` |
 |---|---|---|
 | `terraform.yml` (`infra/**`) | `plan` | `plan` + **`apply`** |
 | `observability.yml` (`observability/**`) | `plan` | `plan` + **`apply`** |
