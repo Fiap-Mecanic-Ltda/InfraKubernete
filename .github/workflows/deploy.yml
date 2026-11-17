@@ -267,6 +267,11 @@ jobs:
           # num único stream (HPA + Secret misturados) corrompia o patch
           # calculado pro último recurso - erro real: "unknown field spec" ao
           # atualizar o Secret ecr-creds, com campos vazados de um HPA.
+          #
+          # O Secret é aplicado depois do app, então um pod recriado pelo apply do
+          # app ainda pode subir com o Secret antigo (uma chave nova e opcional,
+          # como a public key do Mercado Pago, simplesmente não aparece). Por isso,
+          # quando o mechanicltda-secrets muda, o API e o Web são reiniciados.
           APP_KEY="deploy/app-${{ github.sha }}.yaml"
           SECRET_KEY="deploy/secret-${{ github.sha }}.yaml"
           aws s3 cp /tmp/app-manifests.yaml "s3://${STATE_BUCKET}/${APP_KEY}"
@@ -275,7 +280,7 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --parameters "{\"commands\":[\"export KUBECONFIG=/etc/rancher/k3s/k3s.yaml\",\"aws s3 cp s3://${STATE_BUCKET}/${APP_KEY} - | /usr/local/bin/kubectl apply -f -\",\"aws s3 cp s3://${STATE_BUCKET}/${SECRET_KEY} - | /usr/local/bin/kubectl apply -f -\"]}" \
+            --parameters "{\"commands\":[\"export KUBECONFIG=/etc/rancher/k3s/k3s.yaml\",\"aws s3 cp s3://${STATE_BUCKET}/${APP_KEY} - | /usr/local/bin/kubectl apply -f -\",\"aws s3 cp s3://${STATE_BUCKET}/${SECRET_KEY} - | /usr/local/bin/kubectl apply -f - | tee /tmp/secret-apply.out\",\"if grep -q 'secret/mechanicltda-secrets configured' /tmp/secret-apply.out; then /usr/local/bin/kubectl -n mechanicltda rollout restart deployment/mechanicltda-api deployment/mechanicltda-web; fi\"]}" \
             --query "Command.CommandId" --output text)
 
           # Aguarda o comando terminar antes de checar o resultado. Espera
