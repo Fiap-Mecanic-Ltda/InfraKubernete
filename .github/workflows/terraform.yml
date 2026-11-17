@@ -4,7 +4,7 @@ name: Terraform - Infraestrutura AWS
 # ECR, SSM, IAM/OIDC, ALB interno). O RDS fica no repositorio de infra do banco
 # gerenciado.
 #
-# - homolog: plan a cada mudanca em infra/. Nao ha ambiente de homologacao na
+# - homologacao: plan a cada mudanca em infra/. Nao ha ambiente de homologacao na
 #   AWS (decisao do time), entao nada e aplicado a partir desta branch.
 # - main: plan e apply AUTOMATICO a cada mudanca em infra/. O apply pode
 #   recriar recursos com custo e downtime (ex.: mudanca em user_data recria a
@@ -13,12 +13,12 @@ name: Terraform - Infraestrutura AWS
 #   run.
 on:
   push:
-    branches: [main, homolog]
+    branches: [main, homologacao]
     paths:
       - "infra/**"
       - ".github/workflows/terraform.yml"
   pull_request:
-    branches: [main, homolog]
+    branches: [main, homologacao]
     paths:
       - "infra/**"
       - ".github/workflows/terraform.yml"

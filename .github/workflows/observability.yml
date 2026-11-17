@@ -3,19 +3,19 @@ name: Terraform - Observabilidade (New Relic)
 # Alertas, painel, monitor sintetico e notificacoes no New Relic, declarados em
 # observability/. Stack separado do infra/: outro provider, outra credencial.
 #
-# - homolog: plan a cada mudanca em observability/.
+# - homologacao: plan a cada mudanca em observability/.
 # - main: plan e apply automatico (Environment "production").
 #
 # Sem os secrets do New Relic configurados o workflow nao falha: avisa e pula,
 # para nao travar PRs antes de a conta existir.
 on:
   push:
-    branches: [main, homolog]
+    branches: [main, homologacao]
     paths:
       - "observability/**"
       - ".github/workflows/observability.yml"
   pull_request:
-    branches: [main, homolog]
+    branches: [main, homologacao]
     paths:
       - "observability/**"
       - ".github/workflows/observability.yml"
