@@ -32,11 +32,15 @@ spec:
         node-role.kubernetes.io/control-plane: "true"
       # A imagem oficial roda como o usuario rabbitmq (999) quando nao inicia
       # como root; o fsGroup deixa o PVC gravavel por ele.
+      # OnRootMismatch: sem isso o kubelet reaplica as permissoes do fsGroup em
+      # todo arquivo a cada montagem e deixa o .erlang.cookie legivel pelo grupo;
+      # o RabbitMQ entao recusa o cookie e nao sobe depois de um restart do no.
       securityContext:
         runAsNonRoot: true
         runAsUser: 999
         runAsGroup: 999
         fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
       containers:

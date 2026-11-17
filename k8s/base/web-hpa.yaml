@@ -30,5 +30,12 @@ spec:
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 120
+    # O pico de CPU do .NET na subida de um pod (JIT, migrations) disparava o
+    # HPA durante o rollout e enchia os nos t3.small de pods até faltar memória.
+    # A janela ignora o pico de partida e a política sobe no máximo 1 pod por minuto.
     scaleUp:
-      stabilizationWindowSeconds: 0
+      stabilizationWindowSeconds: 120
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
