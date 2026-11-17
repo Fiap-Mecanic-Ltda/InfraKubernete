@@ -198,7 +198,7 @@ variable "app_base_url_aprovacao" {
     IP público da EC2 (comportamento das fases anteriores). Depois que o API
     Gateway estiver no ar, aponte para a URL dele (HTTPS).
   EOT
-  default     = ""
+  default     = "https://nxhycibvie.execute-api.us-east-1.amazonaws.com"
 }
 
 variable "cpf_hash_key" {
@@ -243,8 +243,8 @@ variable "microsservicos_node_ports" {
 variable "rabbitmq_segredo" {
   type        = string
   description = <<-EOT
-    Senha do usuario do RabbitMQ compartilhado pelos microsservicos (Saga). Opcional:
-    vazia, os parametros no SSM nao sao criados e o deploy nao sobe o broker.
+    Senha do usuario do RabbitMQ compartilhado pelos microsservicos (Saga). So e usada
+    na criacao do parametro no SSM; depois o valor do SSM prevalece (ver ssm.tf).
   EOT
   sensitive   = true
   default     = ""
