@@ -202,8 +202,14 @@ jobs:
             NEW_RELIC_PROFILING=0
           fi
 
+          # Public key de teste do Mercado Pago, que o Web usa para tokenizar o cartão no
+          # navegador. Opcional: sem ela, a tela de pagamento fica no modo simulado, que só
+          # o gateway fake do Orçamento entende. Não é segredo, mas fica no SSM com o resto.
+          MERCADOPAGO_PUBLIC_KEY=$(aws ssm get-parameter --name "$PREFIX/mercadopago-public-key" --query 'Parameter.Value' --output text 2>/dev/null || true)
+
           kubectl create secret generic mechanicltda-secrets \
             --namespace mechanicltda \
+            --from-literal=MercadoPago__PublicKey="$MERCADOPAGO_PUBLIC_KEY" \
             --from-literal=ConnectionStrings__DefaultConnection="$(get_param $PREFIX/db-connection-string)" \
             --from-literal=JWT_SECRET_KEY="$(get_param $PREFIX/jwt-secret-key)" \
             --from-literal=ENCRYPTION_KEY="$(get_param $PREFIX/encryption-key)" \
