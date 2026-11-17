@@ -73,6 +73,22 @@ spec:
                   optional: true
             - name: NEW_RELIC_APP_NAME
               value: "mechanicltda-web"
+            # OS, itens, estoque e serviços da oficina vivem só nos microsserviços da Fase 4:
+            # sem estas URLs o Web não sobe. Services do OrdemServico-InfraKubernete e do
+            # ExecucaoProducao-InfraKubernete.
+            - name: Integracoes__OsService__BaseUrl
+              value: "http://os-service.ordem-servico.svc.cluster.local:8080"
+            - name: Integracoes__ExecucaoService__BaseUrl
+              value: "http://execucao-service.execucao.svc.cluster.local:8080"
+            # Orçamento e pagamento (OrcamentoPagamento-service), pelo Service do cluster.
+            # O Web repassa o JWT do usuário; o serviço valida com a mesma chave.
+            - name: Integracoes__OrcamentoService__BaseUrl
+              value: "http://orcamento-api.orcamento.svc.cluster.local:8080"
+            # Igual ao Saga__Habilitada do OS Service. Ligada, a Saga do OS Service conduz
+            # diagnóstico → orçamento → pagamento → execução e a tela da Oficina esconde
+            # os botões manuais da Execução.
+            - name: Integracoes__SagaHabilitada
+              value: "true"
             - name: EmailSettings__Password
               valueFrom:
                 secretKeyRef:

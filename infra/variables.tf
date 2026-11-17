@@ -24,10 +24,21 @@ variable "environment" {
 variable "github_repositories" {
   type        = map(number)
   description = "Repositórios GitHub (owner/repo => ID numérico) autorizados a assumir a role de CI/CD via OIDC."
+  # O microsservico de orcamento usa a mesma role: o repositorio da aplicacao
+  # publica a imagem no ECR e o de infra faz o deploy no namespace "orcamento"
+  # (a policy de push no ECR dele vem do proprio OrcamentoPagamento-InfraKubernete).
   default = {
-    "Fiap-Mecanic-Ltda/MechanicLtda"   = 1200845101
-    "Fiap-Mecanic-Ltda/InfraKubernete" = 1360727713
+    "Fiap-Mecanic-Ltda/MechanicLtda"                      = 1200845101
+    "Fiap-Mecanic-Ltda/InfraKubernete"                    = 1360727713
+    "Fiap-Mecanic-Ltda/OrcamentoPagamento-service"        = 1448861292
+    "Fiap-Mecanic-Ltda/OrcamentoPagamento-InfraKubernete" = 1448864561
   }
+}
+
+variable "github_oidc_include_name_subjects" {
+  type        = bool
+  description = "Também libera o sub claim só com nomes (owner/repo). Desligado: só a forma imutável com IDs, para caber no limite de 2048 caracteres do trust policy."
+  default     = false
 }
 
 # ID numérico da organização, que compõe o mesmo sub claim imutável.
@@ -40,12 +51,12 @@ variable "github_owner_id" {
 
 # Branches cujos workflows podem assumir a role de CI/CD. O sub claim do OIDC
 # carrega a ref do job, então cada branch que dispara pipeline precisa constar
-# aqui — "homolog" é a branch de trabalho atual, enquanto a "main" segue como
+# aqui — "homologacao" é a branch de trabalho atual, enquanto a "main" segue como
 # alvo final.
 variable "github_branches" {
   type        = list(string)
   description = "Branches autorizadas a assumir a role de CI/CD via OIDC."
-  default     = ["main", "homolog"]
+  default     = ["main", "homologacao"]
 }
 
 # Rede
@@ -187,7 +198,7 @@ variable "app_base_url_aprovacao" {
     IP público da EC2 (comportamento das fases anteriores). Depois que o API
     Gateway estiver no ar, aponte para a URL dele (HTTPS).
   EOT
-  default     = ""
+  default     = "https://nxhycibvie.execute-api.us-east-1.amazonaws.com"
 }
 
 variable "cpf_hash_key" {
@@ -211,4 +222,35 @@ variable "newrelic_license_key" {
   EOT
   sensitive   = true
   default     = ""
+}
+
+# Microsservicos da Fase 4
+
+variable "microsservicos_node_ports" {
+  type        = map(number)
+  description = <<-EOT
+    NodePort de cada microsservico que o ALB interno alcanca nos nos k3s. A
+    porta precisa estar entre 8000 e 9000 (--service-node-port-range do k3s) e
+    dentro do egress do SG do ALB (8080-8090).
+  EOT
+  default = {
+    "os-service"        = 8081
+    "execucao-service"  = 8082
+    "orcamento-service" = 8083
+  }
+}
+
+variable "rabbitmq_segredo" {
+  type        = string
+  description = <<-EOT
+    Senha do usuario do RabbitMQ compartilhado pelos microsservicos (Saga). So e usada
+    na criacao do parametro no SSM; depois o valor do SSM prevalece (ver ssm.tf).
+  EOT
+  sensitive   = true
+  default     = ""
+}
+
+variable "rabbitmq_user" {
+  type    = string
+  default = "mechanicltda"
 }

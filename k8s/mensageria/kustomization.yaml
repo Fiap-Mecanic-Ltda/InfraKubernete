@@ -1,0 +1,12 @@
+# RabbitMQ compartilhado pelos microsservicos da Fase 4 (Saga da OS, Billing e
+# Execucao). Fica fora do namespace da aplicacao porque nao pertence a nenhum
+# servico: cada um so recebe o endereco e as proprias credenciais.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mensageria
+
+resources:
+  - namespace.yaml
+  - rabbitmq-statefulset.yaml
+  - rabbitmq-service.yaml

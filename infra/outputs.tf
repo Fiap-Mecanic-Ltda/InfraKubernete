@@ -76,3 +76,22 @@ output "app_subnet_ids" {
   description = "Sub-redes de aplicacao onde ficam o ALB interno e as ENIs do VPC Link."
   value       = [aws_subnet.app_a.id, aws_subnet.app_b.id]
 }
+
+# ── Consumidos pelos repositórios de infra dos microsserviços (Fase 4) ───────
+# Cada serviço cria o próprio target group e a regra no listener do ALB, e
+# registra neles o server e o ASG dos workers.
+
+output "worker_asg_name" {
+  description = "ASG dos workers k3s - registrado nos target groups dos microsservicos."
+  value       = aws_autoscaling_group.worker.name
+}
+
+output "github_oidc_provider_arn" {
+  description = "Provider OIDC do GitHub, reaproveitado pelas roles de CI/CD dos microsservicos."
+  value       = aws_iam_openid_connect_provider.github.arn
+}
+
+output "rabbitmq_host" {
+  description = "Endereco do RabbitMQ dentro do cluster (Service do namespace mensageria)."
+  value       = "rabbitmq.mensageria.svc.cluster.local"
+}

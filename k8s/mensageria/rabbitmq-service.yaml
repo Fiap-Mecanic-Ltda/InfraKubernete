@@ -1,0 +1,21 @@
+# ClusterIP: o broker so e alcancado de dentro do cluster
+# (rabbitmq.mensageria.svc.cluster.local). Nada de NodePort nem regra no ALB.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: mensageria
+  labels:
+    app.kubernetes.io/part-of: mechanicltda
+    app.kubernetes.io/name: rabbitmq
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: rabbitmq
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+    - name: management
+      port: 15672
+      targetPort: management
