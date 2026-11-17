@@ -24,10 +24,21 @@ variable "environment" {
 variable "github_repositories" {
   type        = map(number)
   description = "Repositórios GitHub (owner/repo => ID numérico) autorizados a assumir a role de CI/CD via OIDC."
+  # O microsservico de orcamento usa a mesma role: o repositorio da aplicacao
+  # publica a imagem no ECR e o de infra faz o deploy no namespace "orcamento"
+  # (a policy de push no ECR dele vem do proprio OrcamentoPagamento-InfraKubernete).
   default = {
-    "Fiap-Mecanic-Ltda/MechanicLtda"   = 1200845101
-    "Fiap-Mecanic-Ltda/InfraKubernete" = 1360727713
+    "Fiap-Mecanic-Ltda/MechanicLtda"                      = 1200845101
+    "Fiap-Mecanic-Ltda/InfraKubernete"                    = 1360727713
+    "Fiap-Mecanic-Ltda/OrcamentoPagamento-service"        = 1448861292
+    "Fiap-Mecanic-Ltda/OrcamentoPagamento-InfraKubernete" = 1448864561
   }
+}
+
+variable "github_oidc_include_name_subjects" {
+  type        = bool
+  description = "Também libera o sub claim só com nomes (owner/repo). Desligado: só a forma imutável com IDs, para caber no limite de 2048 caracteres do trust policy."
+  default     = false
 }
 
 # ID numérico da organização, que compõe o mesmo sub claim imutável.
@@ -223,8 +234,9 @@ variable "microsservicos_node_ports" {
     dentro do egress do SG do ALB (8080-8090).
   EOT
   default = {
-    "os-service"       = 8081
-    "execucao-service" = 8082
+    "os-service"        = 8081
+    "execucao-service"  = 8082
+    "orcamento-service" = 8083
   }
 }
 
