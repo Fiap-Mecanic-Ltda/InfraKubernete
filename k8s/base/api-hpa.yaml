@@ -1,4 +1,4 @@
-# Requer o metrics-server instalado no cluster para expor métricas de CPU/memória.
+# Requer o metrics-server instalado no cluster para expor métricas de CPU.
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -21,14 +21,17 @@ spec:
         target:
           type: Utilization
           averageUtilization: 70
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 80
+    # Sem métrica de memória: o consumo do .NET em repouso já fica perto de 80%
+    # do request e não cai quando há mais pods, então o HPA nunca voltava a 1.
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 120
+    # O pico de CPU do .NET na subida de um pod (JIT, migrations) disparava o
+    # HPA durante o rollout e enchia os nos t3.small de pods até faltar memória.
+    # A janela ignora o pico de partida e a política sobe no máximo 1 pod por minuto.
     scaleUp:
-      stabilizationWindowSeconds: 0
+      stabilizationWindowSeconds: 120
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
