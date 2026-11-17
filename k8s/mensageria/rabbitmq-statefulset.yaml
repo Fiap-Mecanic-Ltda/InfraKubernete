@@ -43,6 +43,32 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
+      # Garante o .erlang.cookie com 0400 antes do broker subir. Cobre o volume
+      # criado antes do fsGroupChangePolicy, em que o cookie ficou com 0660.
+      initContainers:
+        - name: permissao-cookie
+          image: rabbitmq:3.13-management
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - "if [ -f /var/lib/rabbitmq/.erlang.cookie ]; then chmod 400 /var/lib/rabbitmq/.erlang.cookie; fi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "16Mi"
+              ephemeral-storage: "16Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+              ephemeral-storage: "64Mi"
+          volumeMounts:
+            - name: dados
+              mountPath: /var/lib/rabbitmq
       containers:
         - name: rabbitmq
           image: rabbitmq:3.13-management
