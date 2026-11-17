@@ -209,6 +209,14 @@ O que este repositório faz por eles:
   `RABBITMQ_SEGREDO` existe: o Terraform grava `/<projeto>/<ambiente>/mensageria/rabbitmq-user` e
   `rabbitmq-segredo` no SSM, e o `deploy.yml` monta o Secret `rabbitmq-credentials` a partir
   deles. Os serviços leem as mesmas credenciais no deploy deles.
+  O pod usa `fsGroupChangePolicy: OnRootMismatch` e um initContainer (`permissao-cookie`) que
+  garante 0400 no `.erlang.cookie`. Sem isso, depois de um reboot do nó o kubelet reaplica o
+  fsGroup no volume, o cookie fica com 0660 e o RabbitMQ não sobe.
+- **HPA dos serviços**: todos escalam **só por CPU** (alvo de 70%), e não por memória. O .NET em
+  repouso já usa perto de 80% do request de memória, e esse consumo não cai com mais pods, então
+  a métrica de memória deixava o HPA preso no máximo de réplicas. A subida tem janela de 120s e
+  no máximo 1 pod por minuto, para o pico de CPU da partida de um pod (JIT, migrations) não
+  disparar réplicas durante o rollout e esgotar a memória dos nós `t3.small`.
 
 ## Primeira subida (ordem entre os repositórios)
 
