@@ -233,14 +233,14 @@ repositório novo (a Lambda, por exemplo) ou uma branch que dispara pipeline, at
 variáveis e rode `terraform apply` — sem isso o job correspondente falha no
 `configure-aws-credentials` com erro de `sts:AssumeRoleWithWebIdentity`.
 
-Hoje o `sub` do token OIDC chega só com os nomes:
-`repo:OWNER/REPO:ref:refs/heads/<branch>` (confirmado no CloudTrail). Se a organização ligar o
-**immutable subject claims**, ele passa a chegar como
-`repo:OWNER@<owner_id>/REPO@<repo_id>:ref:refs/heads/<branch>`. Nesse caso ligue
-`github_oidc_include_id_subjects` e desligue `github_oidc_include_name_subjects`, porque as duas
-formas juntas estouram o limite de 2048 caracteres do trust policy. O ID numérico fica em
-`https://api.github.com/repos/<owner>/<repo>` (campo `id`), e o da organização em
-`https://api.github.com/orgs/<owner>` (`github_owner_id`).
+O formato do `sub` do token OIDC varia por repositório. Os repositórios criados depois que a
+organização ligou o **immutable subject claims** mandam
+`repo:OWNER@<owner_id>/REPO@<repo_id>:ref:refs/heads/<branch>`. Os mais antigos, como o
+MechanicLtda, mandam só os nomes: `repo:OWNER/REPO:ref:refs/heads/<branch>`. Todo repositório entra
+no trust policy na forma com IDs, e os listados em `github_repositories_sub_por_nome` também na
+forma com nomes. Publicar as duas formas para todos estoura o limite de 2048 caracteres do trust
+policy. O ID numérico fica em `https://api.github.com/repos/<owner>/<repo>` (campo `id`), e o da
+organização em `https://api.github.com/orgs/<owner>` (`github_owner_id`).
 
 Para descobrir o `sub` exato que a AWS recebeu numa falha, consulte o CloudTrail:
 

@@ -5,22 +5,21 @@
 # de tentar criar um novo (`terraform import aws_iam_openid_connect_provider.github ...`).
 
 locals {
-  # O sub do token chega só com nomes ("repo:owner/repo:ref:..."), conforme o
-  # CloudTrail das tentativas do GitHub Actions. Se a organização ligar o
-  # immutable subject claims, o GitHub passa a mandar
-  # "owner@<owner_id>/repo@<repo_id>"; aí ligue github_oidc_include_id_subjects.
-  #
-  # As duas formas juntas, com 4 repositórios, estouram o limite de 2048
-  # caracteres do trust policy (LimitExceeded: ACLSizePerRole). Nesse caso
-  # desligue github_oidc_include_name_subjects.
+  # O formato do sub varia por repositório (CloudTrail das tentativas do GitHub
+  # Actions): os repositórios criados depois que a organização ligou o immutable
+  # subject claims mandam "owner@<owner_id>/repo@<repo_id>"; os mais antigos
+  # (ex.: MechanicLtda) mandam só "owner/repo". Todo repositório entra na forma
+  # com IDs, e os de github_repositories_sub_por_nome também na forma com nomes.
+  # Publicar as duas formas para todos estoura o limite de 2048 caracteres do
+  # trust policy (LimitExceeded: ACLSizePerRole).
   github_oidc_repo_subjects = flatten([
     for repo, repo_id in var.github_repositories : concat(
-      var.github_oidc_include_name_subjects ? [repo] : [],
-      var.github_oidc_include_id_subjects ? [format(
+      [format(
         "%s@%s/%s@%s",
         split("/", repo)[0], var.github_owner_id,
         split("/", repo)[1], repo_id,
-      )] : [],
+      )],
+      contains(var.github_repositories_sub_por_nome, repo) ? [repo] : [],
     )
   ])
 
