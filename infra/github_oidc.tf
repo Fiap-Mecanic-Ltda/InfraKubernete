@@ -7,18 +7,21 @@
 locals {
   # Com immutable subject claims ligado na organização, o GitHub troca
   # "owner/repo" por "owner@<owner_id>/repo@<repo_id>" dentro do sub do token.
-  # As duas formas ficam liberadas: os IDs sobrevivem a um rename do repo ou da
-  # org (o objetivo do recurso) e os nomes puros mantêm a role assumível caso a
-  # organização desligue a opção.
+  # Os IDs sobrevivem a um rename do repo ou da org (o objetivo do recurso).
+  #
+  # A forma só com nomes fica desligada por padrão: com 4 repositórios, as duas
+  # formas juntas estouram o limite de 2048 caracteres do trust policy
+  # (LimitExceeded: ACLSizePerRole). Ligue github_oidc_include_name_subjects
+  # apenas se a organização desligar o immutable subject claims.
   github_oidc_repo_subjects = flatten([
-    for repo, repo_id in var.github_repositories : [
-      repo,
-      format(
+    for repo, repo_id in var.github_repositories : concat(
+      var.github_oidc_include_name_subjects ? [repo] : [],
+      [format(
         "%s@%s/%s@%s",
         split("/", repo)[0], var.github_owner_id,
         split("/", repo)[1], repo_id,
-      ),
-    ]
+      )],
+    )
   ])
 
   # Cada repositório é liberado nas branches de CI/CD e nos jobs que referenciam

@@ -197,7 +197,7 @@ regra no listener do ALB e os manifestos no próprio namespace.
 
 O que este repositório faz por eles:
 
-- **Porta no SG dos nós**: `microsservicos_node_ports` (padrão `os-service = 8081`) libera o
+- **Porta no SG dos nós**: `microsservicos_node_ports` (padrão `os-service = 8081`, `execucao-service = 8082`, `orcamento-service = 8083`) libera o
   NodePort de cada serviço só a partir do ALB interno.
 - **ASG nos target groups dos serviços**: o ASG tem `ignore_changes = [target_group_arns]`, porque
   cada serviço registra os workers no próprio target group com `aws_autoscaling_attachment`.
